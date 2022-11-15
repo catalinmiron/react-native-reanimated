@@ -29,7 +29,7 @@ const keyframe = new Keyframe({
     100: {
       transform: [{ rotate: '45deg' }],
     },
-  }
+  })
 ```
 
 Instead of using `0` and `100`, you can define edge points using `from` and `to` keywords. The result will be the same.
@@ -44,7 +44,7 @@ const keyframe = new Keyframe({
     to: {
       transform: [{ rotate: '45deg' }],
     },
-  }
+  })
 ```
 
 Providing keyframe `0` or `from` is required as it contains the initial state of the object you want to animate. 
@@ -70,7 +70,7 @@ const keyframe = new Keyframe({
     100: {
       transform: [{ rotate: '45deg' }],
     },
-  }
+  })
 ```
 
 ### 4. Customize transitions using an easing function
@@ -91,7 +91,7 @@ const keyframe = new Keyframe({
     100: {
       transform: [{ rotate: '45deg' }],
     },
-  }
+  })
 ```
 
 ## How to use keyframe animations?
@@ -107,13 +107,6 @@ Currently, you can define animations using keyframes only for entry and exit ani
 ### 2. Customize the animation
 ```js
     <AnimatedComponent exiting={keyframe.duration(3000).delay(200)} />
-```
-### 3. Make sure that your animated component is under an AnimatedLayout. If it's not then add AnimatedLayout somewhere above the component.
-```js
-    <AnimatedLayout> // +
-        <Text> sth </Text>
-        <AnimatedComponent exiting={keyframe.duration(3000).delay(200)} />
-    </AnimatedLayout> // +
 ```
 
 ## Available modifiers
@@ -178,7 +171,6 @@ export function KeyframeAnimation(): React.ReactElement {
       <View
         style={{ height: 400, alignItems: 'center', justifyContent: 'center' }}>
         {show && (
-          <AnimatedLayout>
             <Animated.View
               entering={enteringAnimation}
               exiting={exitingAnimation}
@@ -190,7 +182,6 @@ export function KeyframeAnimation(): React.ReactElement {
                 justifyContent: 'center',
               }}
             />
-          </AnimatedLayout>
         )}
       </View>
     </View>

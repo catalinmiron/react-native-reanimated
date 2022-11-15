@@ -1,10 +1,12 @@
-/* global _updateProps */
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-nocheck
+/* global _updatePropsPaper _updatePropsFabric */
+import { MutableRefObject } from 'react';
 import { processColor } from './Colors';
+import { AnimatedStyle, SharedValue, StyleProps } from './commonTypes';
 import { makeShareable, isConfigured } from './core';
-import { Platform } from 'react-native';
+import { Descriptor } from './hook/commonTypes';
 import { _updatePropsJS } from './js-reanimated';
+import { shouldBeUseWeb } from './PlatformChecker';
+import { ViewRefSet } from './ViewDescriptorsSet';
 
 // copied from react-native/Libraries/Components/View/ReactNativeStyleAttributes
 export const colorProps = [
@@ -24,45 +26,78 @@ export const colorProps = [
   'overlayColor',
 ];
 
-const ColorProperties = !isConfigured() ? [] : makeShareable(colorProps);
+export const ColorProperties = !isConfigured() ? [] : makeShareable(colorProps);
 
 let updatePropsByPlatform;
-if (Platform.OS === 'web' || process.env.JEST_WORKER_ID) {
-  updatePropsByPlatform = (_, updates, maybeViewRef) => {
+if (shouldBeUseWeb()) {
+  updatePropsByPlatform = (
+    _: SharedValue<Descriptor[]>,
+    updates: StyleProps | AnimatedStyle,
+    maybeViewRef: ViewRefSet<any> | undefined
+  ): void => {
     'worklet';
-    maybeViewRef.items.forEach((item, _) => {
-      _updatePropsJS(updates, item);
-    });
+    if (maybeViewRef) {
+      maybeViewRef.items.forEach((item, _) => {
+        _updatePropsJS(updates, item);
+      });
+    }
   };
 } else {
-  updatePropsByPlatform = (viewDescriptors, updates, _) => {
-    'worklet';
+  if (global._IS_FABRIC) {
+    updatePropsByPlatform = (
+      viewDescriptors: SharedValue<Descriptor[]>,
+      updates: StyleProps | AnimatedStyle,
+      _: ViewRefSet<any> | undefined
+    ): void => {
+      'worklet';
 
-    for (const key in updates) {
-      if (ColorProperties.indexOf(key) !== -1) {
-        updates[key] = processColor(updates[key]);
+      for (const key in updates) {
+        if (ColorProperties.indexOf(key) !== -1) {
+          updates[key] = processColor(updates[key]);
+        }
       }
-    }
 
-    viewDescriptors.value.forEach((viewDescriptor) => {
-      _updateProps(
-        viewDescriptor.tag,
-        viewDescriptor.name || 'RCTView',
-        updates
-      );
-    });
-  };
+      viewDescriptors.value.forEach((viewDescriptor) => {
+        _updatePropsFabric(viewDescriptor.shadowNodeWrapper, updates);
+      });
+    };
+  } else {
+    updatePropsByPlatform = (
+      viewDescriptors: SharedValue<Descriptor[]>,
+      updates: StyleProps | AnimatedStyle,
+      _: ViewRefSet<any> | undefined
+    ): void => {
+      'worklet';
+
+      for (const key in updates) {
+        if (ColorProperties.indexOf(key) !== -1) {
+          updates[key] = processColor(updates[key]);
+        }
+      }
+      viewDescriptors.value.forEach((viewDescriptor) => {
+        _updatePropsPaper(
+          viewDescriptor.tag,
+          viewDescriptor.name || 'RCTView',
+          updates
+        );
+      });
+    };
+  }
 }
 
-export const updateProps = updatePropsByPlatform;
+export const updateProps: (
+  viewDescriptor: SharedValue<Descriptor[]>,
+  updates: StyleProps | AnimatedStyle,
+  maybeViewRef: ViewRefSet<any> | undefined
+) => void = updatePropsByPlatform;
 
 export const updatePropsJestWrapper = (
-  viewDescriptors,
-  updates,
-  maybeViewRef,
-  animatedStyle,
-  adapters
-) => {
+  viewDescriptors: SharedValue<Descriptor[]>,
+  updates: AnimatedStyle,
+  maybeViewRef: ViewRefSet<any> | undefined,
+  animatedStyle: MutableRefObject<AnimatedStyle>,
+  adapters: ((updates: AnimatedStyle) => void)[]
+): void => {
   adapters.forEach((adapter) => {
     adapter(updates);
   });

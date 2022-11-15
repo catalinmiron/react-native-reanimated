@@ -5,9 +5,6 @@ module.exports = {
     'standard',
     'plugin:@typescript-eslint/recommended',
     'prettier',
-    'prettier/flowtype',
-    'prettier/react',
-    'prettier/standard',
     'plugin:import/typescript',
   ],
   plugins: ['react', 'react-native', 'import', 'jest', '@typescript-eslint'],
@@ -17,7 +14,9 @@ module.exports = {
   },
   settings: {
     'import/resolver': {
-      'babel-module': {},
+      'babel-module': {
+        extensions: ['.js', '.jsx', '.ts', '.tsx'],
+      },
     },
   },
   rules: {

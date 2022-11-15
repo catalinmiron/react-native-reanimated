@@ -1,21 +1,23 @@
-import { BaseAnimationBuilder } from '../animationBuilder/BaseAnimationBuilder';
+import { ComplexAnimationBuilder } from '../animationBuilder';
 import {
-  EntryExitAnimationBuild,
+  EntryExitAnimationFunction,
   IEntryExitAnimationBuilder,
 } from '../animationBuilder/commonTypes';
 
 export class PinwheelIn
-  extends BaseAnimationBuilder
-  implements IEntryExitAnimationBuilder {
+  extends ComplexAnimationBuilder
+  implements IEntryExitAnimationBuilder
+{
   static createInstance(): PinwheelIn {
     return new PinwheelIn();
   }
 
-  build: EntryExitAnimationBuild = () => {
+  build = (): EntryExitAnimationFunction => {
     const delayFunction = this.getDelayFunction();
     const [animation, config] = this.getAnimationAndConfig();
-    const delay = this.delayV;
+    const delay = this.getDelay();
     const callback = this.callbackV;
+    const initialValues = this.initialValues;
 
     return (_values) => {
       'worklet';
@@ -27,7 +29,7 @@ export class PinwheelIn
               scale: delayFunction(delay, animation(1, config)),
             },
             {
-              rotate: delayFunction(delay, animation('0turn', config)),
+              rotate: delayFunction(delay, animation('0', config)),
             },
           ],
         },
@@ -38,9 +40,10 @@ export class PinwheelIn
               scale: 0,
             },
             {
-              rotate: '5turn',
+              rotate: '5',
             },
           ],
+          ...initialValues,
         },
         callback: callback,
       };
@@ -49,17 +52,19 @@ export class PinwheelIn
 }
 
 export class PinwheelOut
-  extends BaseAnimationBuilder
-  implements IEntryExitAnimationBuilder {
+  extends ComplexAnimationBuilder
+  implements IEntryExitAnimationBuilder
+{
   static createInstance(): PinwheelOut {
     return new PinwheelOut();
   }
 
-  build: EntryExitAnimationBuild = () => {
+  build = (): EntryExitAnimationFunction => {
     const delayFunction = this.getDelayFunction();
     const [animation, config] = this.getAnimationAndConfig();
-    const delay = this.delayV;
+    const delay = this.getDelay();
     const callback = this.callbackV;
+    const initialValues = this.initialValues;
 
     return (_values) => {
       'worklet';
@@ -71,7 +76,7 @@ export class PinwheelOut
               scale: delayFunction(delay, animation(0, config)),
             },
             {
-              rotate: delayFunction(delay, animation('5turn', config)),
+              rotate: delayFunction(delay, animation('5', config)),
             },
           ],
         },
@@ -82,9 +87,10 @@ export class PinwheelOut
               scale: 1,
             },
             {
-              rotate: '0turn',
+              rotate: '0',
             },
           ],
+          ...initialValues,
         },
         callback: callback,
       };

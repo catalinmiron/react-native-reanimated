@@ -12,7 +12,7 @@ What our exiting animation builders do under the hood is generating a worklet fu
 The high level template looks like this:
 
 ```js
-function CustomExitingAnimation(startingValues) {
+function CustomExitingAnimation(values) {
     'worklet'
     const animations = {
         // your animations
@@ -31,28 +31,32 @@ function CustomExitingAnimation(startingValues) {
 }
 ```
 
-* `startingValues` - contains information about where view was displayed and what were its dimentions
-    * `startingValues.originX` - X coordinate of top left corner in parent's coordinate system
-    * `startingValues.originY` - Y coordinate of top left corner in parent's coordinate system
-    * `startingValues.width` - view's width
-    * `startingValues.height` - view's height
-    * `startingValues.globalOriginX` - X coordinate of top left corner in global coordinate system
-    * `startingValues.globalOriginY` - Y coordinate of top left corner in global coordinate system
+* `values` - contains information about where view was displayed and what were its dimensions
+  * `values.currentOriginX` - X coordinate of top left corner in parent's coordinate system
+  * `values.currentOriginY` - Y coordinate of top left corner in parent's coordinate system
+  * `values.currentWidth` - view's width
+  * `values.currentHeight` - view's height
+  * `values.currentGlobalOriginX` - X coordinate of top left corner in global coordinate system
+  * `values.currentGlobalOriginY` - Y coordinate of top left corner in global coordinate system
 
 ### Example
 ```js
 
 function CardView() {
-  const exiting = (startingValues) => {
+  const exiting = (values) => {
     'worklet';
     const animations = {
       originX: withTiming(width, { duration: 3000 }),
       opacity: withTiming(0.5, { duration: 2000 }),
     };
     const initialValues = {
-      originX: startingValues.originX,
+      originX: values.currentOriginX,
       opacity: 1,
     };
+    return {
+      initialValues,
+      animations,
+    }
   }
 
 
@@ -72,7 +76,7 @@ What our entering animation builders do under the hood is generating a worklet f
 The high level template looks like this:
 
 ```js
-function CustomEnteringAnimation(targetValues) {
+function CustomEnteringAnimation(values) {
     'worklet'
     const animations = {
         // your animations
@@ -91,13 +95,13 @@ function CustomEnteringAnimation(targetValues) {
 }
 ```
 
-* `targetValues` - contains information about where view wants to be displayed and what are its dimentions
-    * `targetValues.originX` - X coordinate of top left corner in parent's coordinate system
-    * `targetValues.originY` - Y coordinate of top left corner in parent's coordinate system
-    * `targetValues.width` - view's width
-    * `targetValues.height` - view's height
-    * `targetValues.globalOriginX` - X coordinate of top left corner in global coordinate system
-    * `targetValues.globalOriginY` - Y coordinate of top left corner in global coordinate system
+* `values` - contains information about where view wants to be displayed and what are its dimensions
+  * `values.targetOriginX` - X coordinate of top left corner in parent's coordinate system
+  * `values.targetOriginY` - Y coordinate of top left corner in parent's coordinate system
+  * `values.targetWidth` - view's width 
+  * `values.targetHeight` - view's height 
+  * `values.targetGlobalOriginX` - X coordinate of top left corder in global coordinate system
+  * `values.targetGlobalOriginY` - Y coordinate of top left corder in global coordinate system
 
 ### Example
 ```js
@@ -162,19 +166,19 @@ function CustomLayoutTransition(values) {
 }
 ```
 
-* `values` - contains before and after information about the view's origin and dimations
-    * `values.originX` - X coordinate of top left corner in parent's coordinate system (after)
-    * `values.originY` - Y coordinate of top left corner in parent's coordinate system (after)
-    * `values.width` - view's width (after)
-    * `values.height` - view's height (after)
-    * `values.globalOriginX` - X coordinate of top left corder in global coordinate system (after)
-    * `values.globalOriginY` - Y coordinate of top left corder in global coordinate system (after)
-    * `values.boriginX` - X coordinate of top left corner in parent's coordinate system (before)
-    * `values.boriginY` - Y coordinate of top left corner in parent's coordinate system (before)
-    * `values.bwidth` - view's width (before)
-    * `values.bheight` - view's height (before)
-    * `values.bglobalOriginX` - X coordinate of top left corner in global coordinate system (before)
-    * `values.bglobalOriginY` - Y coordinate of top left corner in global coordinate system (before)
+* `values` - contains before and after information about the view's origin and dimensions
+    * `values.targetOriginX` - X coordinate of top left corner in parent's coordinate system 
+    * `values.targetOriginY` - Y coordinate of top left corner in parent's coordinate system 
+    * `values.targetWidth` - view's width 
+    * `values.targetHeight` - view's height 
+    * `values.targetGlobalOriginX` - X coordinate of top left corder in global coordinate system 
+    * `values.targetGlobalOriginY` - Y coordinate of top left corder in global coordinate system 
+    * `values.currentOriginX` - X coordinate of top left corner in parent's coordinate system (before)
+    * `values.currentOriginY` - Y coordinate of top left corner in parent's coordinate system (before)
+    * `values.currentWidth` - view's width (before)
+    * `values.currentHeight` - view's height (before)
+    * `values.currentGlobalOriginX` - X coordinate of top left corner in global coordinate system (before)
+    * `values.currentGlobalOriginY` - Y coordinate of top left corner in global coordinate system (before)
 
 ### Example
 <video src="https://user-images.githubusercontent.com/12784455/120450759-09fa3980-c391-11eb-9b64-65ec8e6c2509.mp4" controls="controls" muted="muted" width="45%"></video>
@@ -185,16 +189,16 @@ function CustomLayoutTransition(values) {
   'worklet'
   return {
     animations: {
-      originX: withTiming(values.originX, {duration: 1000}),
-      originY: withDelay(1000, withTiming(values.originY, {duration: 1000})),
-      width: withSpring(values.width),
-      height: withSpring(values.height),
+      originX: withTiming(values.targetOriginX, {duration: 1000}),
+      originY: withDelay(1000, withTiming(values.targetOriginY, {duration: 1000})),
+      width: withSpring(values.targetWidth),
+      height: withSpring(values.targetHeight),
     },
     initialValues: {
-      originX: values.boriginX,
-      originY: values.boriginY,
-      width: values.bwidth,
-      height: values.bheight,
+      originX: values.currentOriginX,
+      originY: values.currentOriginY,
+      width: values.currentWidth,
+      height: values.currentHeight,
     }
   };
 }
@@ -221,12 +225,12 @@ export function CustomLayoutTransitionExample(): React.ReactElement {
   return (
     <View style={{marginTop: 30}} >
       <View style={{height: 300}} >
-        <AnimatedLayout style={{flexDirection: state? 'row' : 'column'}} >
+        <View style={{flexDirection: state? 'row' : 'column'}} >
           {state && <Box key="a" label="A" state={state} />}
           <Box key="b" label="B" state={state} />
           {!state && <Box key="a" label="A" state={state} />}
           <Box key="c" label="C" state={state} />
-        </AnimatedLayout>
+        </View>
       </View>
     
       <Button onPress={() => {setState(!state)}} title="toggle" />

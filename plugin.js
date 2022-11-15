@@ -3,10 +3,12 @@ const generate = require('@babel/generator').default;
 const hash = require('string-hash-64');
 const traverse = require('@babel/traverse').default;
 const { transformSync } = require('@babel/core');
+const fs = require('fs');
 /**
  * holds a map of function names as keys and array of argument indexes as values which should be automatically workletized(they have to be functions)(starting from 0)
  */
 const functionArgsToWorkletize = new Map([
+  ['useFrameCallback', [0]],
   ['useAnimatedStyle', [0]],
   ['useAnimatedProps', [0]],
   ['createAnimatedPropAdapter', [0]],
@@ -14,7 +16,6 @@ const functionArgsToWorkletize = new Map([
   ['useAnimatedScrollHandler', [0]],
   ['useAnimatedReaction', [0, 1]],
   ['useWorkletCallback', [0]],
-  ['createWorklet', [0]],
   // animations' callbacks
   ['withTiming', [2]],
   ['withSpring', [2]],
@@ -30,10 +31,21 @@ const objectHooks = new Set([
 const globals = new Set([
   'this',
   'console',
+  'performance',
   '_setGlobalConsole',
+  '_chronoNow',
   'Date',
   'Array',
   'ArrayBuffer',
+  'Int8Array',
+  'Int16Array',
+  'Int32Array',
+  'Uint8Array',
+  'Uint8ClampedArray',
+  'Uint16Array',
+  'Uint32Array',
+  'Float32Array',
+  'Float64Array',
   'Date',
   'HermesInternal',
   'JSON',
@@ -54,12 +66,16 @@ const globals = new Set([
   'Map',
   'Set',
   '_log',
-  '_updateProps',
+  '_updatePropsPaper',
+  '_updatePropsFabric',
+  '_removeShadowNodeFromRegistry',
   'RegExp',
   'Error',
   'global',
   '_measure',
   '_scrollTo',
+  '_dispatchCommand',
+  '_setGestureState',
   '_getCurrentTime',
   '_eventTimestamp',
   '_frameTimestamp',
@@ -75,6 +91,7 @@ const blacklistedFunctions = new Set([
   'toString',
   'map',
   'filter',
+  'findIndex',
   'forEach',
   'valueOf',
   'toPrecision',
@@ -125,6 +142,35 @@ const blacklistedFunctions = new Set([
 ]);
 
 const possibleOptFunction = new Set(['interpolate']);
+
+const gestureHandlerGestureObjects = new Set([
+  // from https://github.com/software-mansion/react-native-gesture-handler/blob/new-api/src/handlers/gestures/gestureObjects.ts
+  'Tap',
+  'Pan',
+  'Pinch',
+  'Rotation',
+  'Fling',
+  'LongPress',
+  'ForceTouch',
+  'Native',
+  'Manual',
+  'Race',
+  'Simultaneous',
+  'Exclusive',
+]);
+
+const gestureHandlerBuilderMethods = new Set([
+  'onBegin',
+  'onStart',
+  'onEnd',
+  'onFinalize',
+  'onUpdate',
+  'onChange',
+  'onTouchesDown',
+  'onTouchesMove',
+  'onTouchesUp',
+  'onTouchesCancelled',
+]);
 
 class ClosureGenerator {
   constructor() {
@@ -232,66 +278,156 @@ class ClosureGenerator {
   }
 }
 
-function buildWorkletString(t, fun, closureVariables, name) {
-  function prependClosureVariablesIfNecessary(closureVariables, body) {
-    if (closureVariables.length === 0) {
-      return body;
-    }
+function isRelease() {
+  return ['production', 'release'].includes(process.env.BABEL_ENV);
+}
 
-    return t.blockStatement([
-      t.variableDeclaration('const', [
-        t.variableDeclarator(
-          t.objectPattern(
-            closureVariables.map((variable) =>
-              t.objectProperty(
-                t.identifier(variable.name),
-                t.identifier(variable.name),
-                false,
-                true
-              )
-            )
-          ),
-          t.memberExpression(t.identifier('jsThis'), t.identifier('_closure'))
-        ),
-      ]),
-      body,
-    ]);
+function shouldGenerateSourceMap() {
+  if (isRelease()) {
+    return false;
   }
 
-  traverse(fun, {
-    enter(path) {
-      t.removeComments(path.node);
-    },
-  });
+  if (process.env.REANIMATED_PLUGIN_TESTS === 'jest') {
+    // We want to detect this, so we can disable source maps (because they break
+    // snapshot tests with jest).
+    return false;
+  }
+
+  return true;
+}
+
+function buildWorkletString(t, fun, closureVariables, name, inputMap) {
+  function prependClosureVariablesIfNecessary() {
+    const closureDeclaration = t.variableDeclaration('const', [
+      t.variableDeclarator(
+        t.objectPattern(
+          closureVariables.map((variable) =>
+            t.objectProperty(
+              t.identifier(variable.name),
+              t.identifier(variable.name),
+              false,
+              true
+            )
+          )
+        ),
+        t.memberExpression(t.identifier('jsThis'), t.identifier('_closure'))
+      ),
+    ]);
+
+    function prependClosure(path) {
+      if (closureVariables.length === 0 || path.parent.type !== 'Program') {
+        return;
+      }
+
+      path.node.body.body.unshift(closureDeclaration);
+    }
+
+    return {
+      visitor: {
+        FunctionDeclaration(path) {
+          prependClosure(path);
+        },
+        FunctionExpression(path) {
+          prependClosure(path);
+        },
+        ArrowFunctionExpression(path) {
+          prependClosure(path);
+        },
+        ObjectMethod(path) {
+          prependClosure(path);
+        },
+      },
+    };
+  }
+
+  const expression =
+    fun.program.body.find(({ type }) => type === 'FunctionDeclaration') ||
+    fun.program.body.find(({ type }) => type === 'ExpressionStatement')
+      .expression;
 
   const workletFunction = t.functionExpression(
     t.identifier(name),
-    fun.program.body[0].expression.params,
-    prependClosureVariablesIfNecessary(
-      closureVariables,
-      fun.program.body[0].expression.body
-    )
+    expression.params,
+    expression.body
   );
 
-  return generate(workletFunction, { compact: true }).code;
+  const code = generate(workletFunction).code;
+
+  if (shouldGenerateSourceMap()) {
+    // Clear contents array (should be empty anyways)
+    inputMap.sourcesContent = [];
+    // Include source contents in source map, because Flipper/iframe is not
+    // allowed to read files from disk.
+    for (const sourceFile of inputMap.sources) {
+      inputMap.sourcesContent.push(
+        fs.readFileSync(sourceFile).toString('utf-8')
+      );
+    }
+  }
+
+  const transformed = transformSync(code, {
+    plugins: [prependClosureVariablesIfNecessary()],
+    compact: !shouldGenerateSourceMap(),
+    sourceMaps: shouldGenerateSourceMap() ? 'inline' : false,
+    inputSourceMap: inputMap,
+    ast: false,
+    babelrc: false,
+    configFile: false,
+    comments: false,
+  });
+
+  return transformed.code;
 }
 
-function processWorkletFunction(t, fun, fileName) {
-  if (!t.isFunctionParent(fun)) {
-    return;
+function makeWorkletName(t, fun) {
+  if (t.isObjectMethod(fun)) {
+    return fun.node.key.name;
   }
-  const functionName = fun.node.id ? fun.node.id.name : '_f';
+  if (t.isFunctionDeclaration(fun)) {
+    return fun.node.id.name;
+  }
+  if (t.isFunctionExpression(fun) && t.isIdentifier(fun.node.id)) {
+    return fun.node.id.name;
+  }
+  return '_f'; // fallback for ArrowFunctionExpression and unnamed FunctionExpression
+}
+
+function makeWorklet(t, fun, state) {
+  // Returns a new FunctionExpression which is a workletized version of provided
+  // FunctionDeclaration, FunctionExpression, ArrowFunctionExpression or ObjectMethod.
+
+  const functionName = makeWorkletName(t, fun);
 
   const closure = new Map();
-  const outputs = new Set();
   const closureGenerator = new ClosureGenerator();
   const options = {};
 
+  // remove 'worklet'; directive before generating string
+  fun.traverse({
+    DirectiveLiteral(path) {
+      if (path.node.value === 'worklet' && path.getFunctionParent() === fun) {
+        path.parentPath.remove();
+      }
+    },
+  });
+
   // We use copy because some of the plugins don't update bindings and
   // some even break them
-  const code = '\n(' + fun.toString() + '\n)';
+
+  const codeObject = generate(fun.node, {
+    sourceMaps: true,
+    sourceFileName: state.file.opts.filename,
+  });
+
+  // We need to add a newline at the end, because there could potentially be a
+  // comment after the function that gets included here, and then the closing
+  // bracket would become part of the comment thus resulting in an error, since
+  // there is a missing closing bracket.
+  const code =
+    '(' + (t.isObjectMethod(fun) ? 'function ' : '') + codeObject.code + '\n)';
+
   const transformed = transformSync(code, {
-    filename: fileName,
+    filename: state.file.opts.filename,
     presets: ['@babel/preset-typescript'],
     plugins: [
       '@babel/plugin-transform-shorthand-properties',
@@ -303,7 +439,9 @@ function processWorkletFunction(t, fun, fileName) {
     ast: true,
     babelrc: false,
     configFile: false,
+    inputSourceMap: codeObject.map,
   });
+
   if (
     fun.parent &&
     fun.parent.callee &&
@@ -347,26 +485,8 @@ function processWorkletFunction(t, fun, fileName) {
       closure.set(name, path.node);
       closureGenerator.addPath(name, path);
     },
-    AssignmentExpression(path) {
-      // test for <somethin>.value = <something> expressions
-      const left = path.node.left;
-      if (
-        t.isMemberExpression(left) &&
-        t.isIdentifier(left.object) &&
-        t.isIdentifier(left.property, { name: 'value' })
-      ) {
-        outputs.add(left.object.name);
-      }
-    },
   });
 
-  fun.traverse({
-    DirectiveLiteral(path) {
-      if (path.node.value === 'worklet' && path.getFunctionParent() === fun) {
-        path.parentPath.remove();
-      }
-    },
-  });
   const variables = Array.from(closure.values());
 
   const privateFunctionId = t.identifier('_f');
@@ -377,23 +497,31 @@ function processWorkletFunction(t, fun, fileName) {
   } else {
     funExpression = clone;
   }
+
   const funString = buildWorkletString(
     t,
     transformed.ast,
     variables,
-    functionName
-  ).replace("'worklet';", '');
+    functionName,
+    transformed.map
+  );
   const workletHash = hash(funString);
+
+  let location = state.file.opts.filename;
+  if (state.opts && state.opts.relativeSourceLocation) {
+    const path = require('path');
+    location = path.relative(state.cwd, location);
+  }
 
   const loc = fun && fun.node && fun.node.loc && fun.node.loc.start;
   if (loc) {
     const { line, column } = loc;
     if (typeof line === 'number' && typeof column === 'number') {
-      fileName = `${fileName} (${line}:${column})`;
+      location = `${location} (${line}:${column})`;
     }
   }
 
-  const steatmentas = [
+  const statements = [
     t.variableDeclaration('const', [
       t.variableDeclarator(privateFunctionId, funExpression),
     ]),
@@ -430,13 +558,13 @@ function processWorkletFunction(t, fun, fileName) {
           t.identifier('__location'),
           false
         ),
-        t.stringLiteral(fileName)
+        t.stringLiteral(location)
       )
     ),
   ];
 
   if (options && options.optFlags) {
-    steatmentas.push(
+    statements.push(
       t.expressionStatement(
         t.assignmentExpression(
           '=',
@@ -451,32 +579,30 @@ function processWorkletFunction(t, fun, fileName) {
     );
   }
 
-  steatmentas.push(
-    t.expressionStatement(
-      t.callExpression(
-        t.memberExpression(
-          t.identifier('global'),
-          t.identifier('__reanimatedWorkletInit'),
-          false
-        ),
-        [privateFunctionId]
-      )
-    )
-  );
-  steatmentas.push(t.returnStatement(privateFunctionId));
+  statements.push(t.returnStatement(privateFunctionId));
 
-  const newFun = t.functionExpression(
-    fun.id,
-    [],
-    t.blockStatement(steatmentas)
-  );
+  const newFun = t.functionExpression(fun.id, [], t.blockStatement(statements));
+
+  return newFun;
+}
+
+function processWorkletFunction(t, fun, state) {
+  // Replaces FunctionDeclaration, FunctionExpression or ArrowFunctionExpression
+  // with a workletized version of itself.
+
+  if (!t.isFunctionParent(fun)) {
+    return;
+  }
+
+  const newFun = makeWorklet(t, fun, state);
 
   const replacement = t.callExpression(newFun, []);
+
   // we check if function needs to be assigned to variable declaration.
   // This is needed if function definition directly in a scope. Some other ways
   // where function definition can be used is for example with variable declaration:
   // const ggg = function foo() { }
-  // ^ in such a case we don't need to definte variable for the function
+  // ^ in such a case we don't need to define variable for the function
   const needDeclaration =
     t.isScopable(fun.parent) || t.isExportNamedDeclaration(fun.parent);
   fun.replaceWith(
@@ -488,7 +614,24 @@ function processWorkletFunction(t, fun, fileName) {
   );
 }
 
-function processIfWorkletNode(t, fun, fileName) {
+function processWorkletObjectMethod(t, path, state) {
+  // Replaces ObjectMethod with a workletized version of itself.
+
+  if (!t.isFunctionParent(path)) {
+    return;
+  }
+
+  const newFun = makeWorklet(t, path, state);
+
+  const replacement = t.objectProperty(
+    t.identifier(path.node.key.name),
+    t.callExpression(newFun, [])
+  );
+
+  path.replaceWith(replacement);
+}
+
+function processIfWorkletNode(t, fun, state) {
   fun.traverse({
     DirectiveLiteral(path) {
       const value = path.node.value;
@@ -506,14 +649,123 @@ function processIfWorkletNode(t, fun, fileName) {
               directive.value.value === 'worklet'
           )
         ) {
-          processWorkletFunction(t, fun, fileName);
+          processWorkletFunction(t, fun, state);
         }
       }
     },
   });
 }
 
-function processWorklets(t, path, fileName) {
+function processIfGestureHandlerEventCallbackFunctionNode(t, fun, state) {
+  // Auto-workletizes React Native Gesture Handler callback functions.
+  // Detects `Gesture.Tap().onEnd(<fun>)` or similar, but skips `something.onEnd(<fun>)`.
+  // Supports method chaining as well, e.g. `Gesture.Tap().onStart(<fun1>).onUpdate(<fun2>).onEnd(<fun3>)`.
+
+  // Example #1: `Gesture.Tap().onEnd(<fun>)`
+  /*
+  CallExpression(
+    callee: MemberExpression(
+      object: CallExpression(
+        callee: MemberExpression(
+          object: Identifier('Gesture')
+          property: Identifier('Tap')
+        )
+      )
+      property: Identifier('onEnd')
+    )
+    arguments: [fun]
+  )
+  */
+
+  // Example #2: `Gesture.Tap().onStart(<fun1>).onUpdate(<fun2>).onEnd(<fun3>)`
+  /*
+  CallExpression(
+    callee: MemberExpression(
+      object: CallExpression(
+        callee: MemberExpression(
+          object: CallExpression(
+            callee: MemberExpression(
+              object: CallExpression(
+                callee: MemberExpression(
+                  object: Identifier('Gesture')
+                  property: Identifier('Tap')
+                )
+              )
+              property: Identifier('onStart')
+            )
+            arguments: [fun1]
+          )
+          property: Identifier('onUpdate')
+        )
+        arguments: [fun2]
+      )
+      property: Identifier('onEnd')
+    )
+    arguments: [fun3]
+  )
+  */
+
+  if (
+    t.isCallExpression(fun.parent) &&
+    isGestureObjectEventCallbackMethod(t, fun.parent.callee)
+  ) {
+    processWorkletFunction(t, fun, state);
+  }
+}
+
+function isGestureObjectEventCallbackMethod(t, node) {
+  // Checks if node matches the pattern `Gesture.Foo()[*].onBar`
+  // where `[*]` represents any number of method calls.
+  return (
+    t.isMemberExpression(node) &&
+    t.isIdentifier(node.property) &&
+    gestureHandlerBuilderMethods.has(node.property.name) &&
+    containsGestureObject(t, node.object)
+  );
+}
+
+function containsGestureObject(t, node) {
+  // Checks if node matches the pattern `Gesture.Foo()[*]`
+  // where `[*]` represents any number of chained method calls, like `.something(42)`.
+
+  // direct call
+  if (isGestureObject(t, node)) {
+    return true;
+  }
+
+  // method chaining
+  if (
+    t.isCallExpression(node) &&
+    t.isMemberExpression(node.callee) &&
+    containsGestureObject(t, node.callee.object)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function isGestureObject(t, node) {
+  // Checks if node matches `Gesture.Tap()` or similar.
+  /*
+  node: CallExpression(
+    callee: MemberExpression(
+      object: Identifier('Gesture')
+      property: Identifier('Tap')
+    )
+  )
+  */
+  return (
+    t.isCallExpression(node) &&
+    t.isMemberExpression(node.callee) &&
+    t.isIdentifier(node.callee.object) &&
+    node.callee.object.name === 'Gesture' &&
+    t.isIdentifier(node.callee.property) &&
+    gestureHandlerGestureObjects.has(node.callee.property.name)
+  );
+}
+
+function processWorklets(t, path, state) {
   const name =
     path.node.callee.type === 'MemberExpression'
       ? path.node.callee.property.name
@@ -522,23 +774,20 @@ function processWorklets(t, path, fileName) {
     objectHooks.has(name) &&
     path.get('arguments.0').type === 'ObjectExpression'
   ) {
-    const objectPath = path.get('arguments.0.properties.0');
-    if (!objectPath) {
-      // edge case empty object
-      return;
-    }
-    for (let i = 0; i < objectPath.container.length; i++) {
-      processWorkletFunction(
-        t,
-        objectPath.getSibling(i).get('value'),
-        fileName
-      );
+    const properties = path.get('arguments.0.properties');
+    for (const property of properties) {
+      if (t.isObjectMethod(property)) {
+        processWorkletObjectMethod(t, property, state);
+      } else {
+        const value = property.get('value');
+        processWorkletFunction(t, value, state);
+      }
     }
   } else {
     const indexes = functionArgsToWorkletize.get(name);
     if (Array.isArray(indexes)) {
       indexes.forEach((index) => {
-        processWorkletFunction(t, path.get(`arguments.${index}`), fileName);
+        processWorkletFunction(t, path.get(`arguments.${index}`), state);
       });
     }
   }
@@ -549,7 +798,7 @@ const STATEMENTLESS_FLAG = 0b00000010;
 
 function isPossibleOptimization(fun) {
   let isFunctionCall = false;
-  let isSteatements = false;
+  let isStatement = false;
   traverse(fun, {
     CallExpression(path) {
       if (!possibleOptFunction.has(path.node.callee.name)) {
@@ -557,14 +806,14 @@ function isPossibleOptimization(fun) {
       }
     },
     IfStatement() {
-      isSteatements = true;
+      isStatement = true;
     },
   });
   let flags = 0;
   if (!isFunctionCall) {
     flags = flags | FUNCTIONLESS_FLAG;
   }
-  if (!isSteatements) {
+  if (!isStatement) {
     flags = flags | STATEMENTLESS_FLAG;
   }
   return flags;
@@ -583,12 +832,13 @@ module.exports = function ({ types: t }) {
     visitor: {
       CallExpression: {
         enter(path, state) {
-          processWorklets(t, path, state.file.opts.filename);
+          processWorklets(t, path, state);
         },
       },
       'FunctionDeclaration|FunctionExpression|ArrowFunctionExpression': {
         enter(path, state) {
-          processIfWorkletNode(t, path, state.file.opts.filename);
+          processIfWorkletNode(t, path, state);
+          processIfGestureHandlerEventCallbackFunctionNode(t, path, state);
         },
       },
     },

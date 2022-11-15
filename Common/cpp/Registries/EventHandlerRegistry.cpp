@@ -3,7 +3,8 @@
 
 namespace reanimated {
 
-void EventHandlerRegistry::registerEventHandler(std::shared_ptr<WorkletEventHandler> eventHandler) {
+void EventHandlerRegistry::registerEventHandler(
+    std::shared_ptr<WorkletEventHandler> eventHandler) {
   const std::lock_guard<std::mutex> lock(instanceMutex);
   eventMappings[eventHandler->eventName][eventHandler->id] = eventHandler;
   eventHandlers[eventHandler->id] = eventHandler;
@@ -21,7 +22,15 @@ void EventHandlerRegistry::unregisterEventHandler(unsigned long id) {
   }
 }
 
-void EventHandlerRegistry::processEvent(jsi::Runtime &rt, std::string eventName, std::string eventPayload) {
+void EventHandlerRegistry::processEvent(
+    jsi::Runtime &rt,
+    std::string eventName,
+#ifdef RCT_NEW_ARCH_ENABLED
+    jsi::Value &eventPayload
+#else
+    std::string eventPayload
+#endif
+    /**/) {
   std::vector<std::shared_ptr<WorkletEventHandler>> handlersForEvent;
   {
     const std::lock_guard<std::mutex> lock(instanceMutex);
@@ -32,30 +41,41 @@ void EventHandlerRegistry::processEvent(jsi::Runtime &rt, std::string eventName,
       }
     }
   }
+#ifdef RCT_NEW_ARCH_ENABLED
+  eventPayload.asObject(rt).setProperty(
+      rt, "eventName", jsi::String::createFromUtf8(rt, eventName));
+  for (auto handler : handlersForEvent) {
+    handler->process(rt, eventPayload);
+  }
+#else
   // We receive here a JS Map with JSON as a value of NativeMap key
   // { NativeMap: { "jsonProp": "json value" } }
   // So we need to extract only JSON part
   std::string delimimter = "NativeMap:";
   auto positionToSplit = eventPayload.find(delimimter) + delimimter.size();
   auto lastBracketCharactedPosition = eventPayload.size() - positionToSplit - 1;
-  auto eventJSON = eventPayload.substr(positionToSplit,  lastBracketCharactedPosition);
+  auto eventJSON =
+      eventPayload.substr(positionToSplit, lastBracketCharactedPosition);
 
   if (eventJSON.compare(std::string("null")) == 0) {
     return;
   }
 
-  auto eventObject = jsi::Value::createFromJsonUtf8(rt, (uint8_t*)(&eventJSON[0]), eventJSON.size());
+  auto eventObject = jsi::Value::createFromJsonUtf8(
+      rt, reinterpret_cast<uint8_t *>(&eventJSON[0]), eventJSON.size());
 
-  eventObject.asObject(rt).setProperty(rt, "eventName", jsi::String::createFromUtf8(rt, eventName));
+  eventObject.asObject(rt).setProperty(
+      rt, "eventName", jsi::String::createFromUtf8(rt, eventName));
   for (auto handler : handlersForEvent) {
     handler->process(rt, eventObject);
   }
+#endif
 }
 
 bool EventHandlerRegistry::isAnyHandlerWaitingForEvent(std::string eventName) {
   const std::lock_guard<std::mutex> lock(instanceMutex);
   auto it = eventMappings.find(eventName);
-  return (it != eventMappings.end()) and (!(it->second).empty());
+  return (it != eventMappings.end()) && (!(it->second).empty());
 }
 
-}
+} // namespace reanimated
