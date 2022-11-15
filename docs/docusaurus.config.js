@@ -70,12 +70,13 @@ In swizzled components look for "SWM -" string to see our modifications
 module.exports = {
   title: 'React Native Reanimated',
   tagline: "React Native's Animated library reimplemented",
-  url: 'https://docs.swmansion.com/react-native-reanimated/',
-  baseUrl: '/react-native-reanimated/',
+  url: 'http://www.reanimated2.com',
+  baseUrl: '/',
   onBrokenLinks: 'throw',
   onBrokenMarkdownLinks: 'warn',
   favicon: 'img/SWM_Fav_192x192.png',
-  organizationName: 'software-mansion',
+  organizationName: 'catalinmiron',
+  onBrokenLinks: 'warn',
   customFields: {
     shortTitle: 'Reanimated',
   },
@@ -87,7 +88,7 @@ module.exports = {
       // contextualSearch: true, // doesn't work for some reason
     },
     googleAnalytics: {
-      trackingID: 'UA-41044622-6',
+      trackingID: 'UA-23679093-16',
       anonymizeIP: true,
     },
     colorMode: {
@@ -96,6 +97,12 @@ module.exports = {
     navbar: {
       title: 'React Native Reanimated',
       items: [
+        {
+          type: 'doc',
+          position: 'right',
+          docId: 'fundamentals/about',
+          label: 'Docs',
+        },
         {
           type: 'docsVersionDropdown',
           position: 'right',
