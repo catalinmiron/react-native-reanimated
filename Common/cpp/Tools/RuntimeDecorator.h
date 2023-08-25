@@ -1,18 +1,24 @@
 #pragma once
 
 #include <jsi/jsi.h>
-#include <stdio.h>
 #include <memory>
 #include <string>
 #include <unordered_map>
-#include "LayoutAnimationsProxy.h"
 #include "PlatformDepMethodsHolder.h"
+#include "ReanimatedVersion.h"
 
 using namespace facebook;
 
 namespace reanimated {
 
-using RequestFrameFunction = std::function<void(std::function<void(double)>)>;
+using RequestFrameFunction =
+    std::function<void(jsi::Runtime &, const jsi::Value &)>;
+using ScheduleOnJSFunction =
+    std::function<void(jsi::Runtime &, const jsi::Value &, const jsi::Value &)>;
+using MakeShareableCloneFunction =
+    std::function<jsi::Value(jsi::Runtime &, const jsi::Value &)>;
+using UpdateDataSynchronouslyFunction =
+    std::function<void(jsi::Runtime &, const jsi::Value &, const jsi::Value &)>;
 
 enum RuntimeType {
   /**
@@ -32,19 +38,29 @@ class RuntimeDecorator {
   static void decorateUIRuntime(
       jsi::Runtime &rt,
       const UpdatePropsFunction updateProps,
+#ifdef RCT_NEW_ARCH_ENABLED
+      const RemoveFromPropsRegistryFunction removeFromPropsRegistry,
+#endif
       const MeasureFunction measure,
 #ifdef RCT_NEW_ARCH_ENABLED
-      const RemoveShadowNodeFromRegistryFunction removeShadowNodeFromRegistry,
-      const DispatchCommandFunction dispatchCommand,
+  // nothing
 #else
       const ScrollToFunction scrollTo,
 #endif
+      const DispatchCommandFunction dispatchCommand,
       const RequestFrameFunction requestFrame,
+      const ScheduleOnJSFunction scheduleOnJS,
+      const MakeShareableCloneFunction makeShareableClone,
+      const UpdateDataSynchronouslyFunction updateDataSynchronously,
       const TimeProviderFunction getCurrentTime,
-      const RegisterSensorFunction registerSensor,
-      const UnregisterSensorFunction unregisterSensor,
       const SetGestureStateFunction setGestureState,
-      std::shared_ptr<LayoutAnimationsProxy> layoutAnimationsProxy);
+      const ProgressLayoutAnimationFunction progressLayoutAnimationFunction,
+      const EndLayoutAnimationFunction endLayoutAnimationFunction,
+      const MaybeFlushUIUpdatesQueueFunction maybeFlushUIUpdatesQueueFunction);
+  static void decorateRNRuntime(
+      jsi::Runtime &rnRuntime,
+      const std::shared_ptr<jsi::Runtime> &uiRuntime,
+      bool isReducedMotion);
 
   /**
    Returns true if the given Runtime is the Reanimated UI-Thread Runtime.

@@ -1,11 +1,51 @@
 /* eslint-disable node/no-callback-literal */
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck
+import { SensorType } from './commonTypes';
+
 const NOOP = () => {
   // noop
 };
 const ID = (t) => t;
 const IMMEDIATE_CB_INVOCATION = (cb: () => unknown) => cb();
+
+class BaseAnimationMock {
+  duration(_: number) {
+    return this;
+  }
+
+  delay(_: number) {
+    return this;
+  }
+
+  springify(_: number) {
+    return this;
+  }
+
+  damping(_: number) {
+    return this;
+  }
+
+  stiffness(_: number) {
+    return this;
+  }
+
+  withCallback(_: (finished: boolean) => void) {
+    return this;
+  }
+
+  randomDelay() {
+    return this;
+  }
+
+  withInitialValues() {
+    return this;
+  }
+
+  build() {
+    return () => ({ initialValues: {}, animations: {} });
+  }
+}
 
 const ReanimatedV2 = {
   useSharedValue: (v) => ({ value: v }),
@@ -16,6 +56,31 @@ const ReanimatedV2 = {
   useAnimatedRef: () => ({ current: null }),
   useAnimatedReaction: NOOP,
   useAnimatedProps: IMMEDIATE_CB_INVOCATION,
+  SensorType: SensorType,
+  useAnimatedSensor: () => ({
+    sensor: {
+      value: {
+        x: 0,
+        y: 0,
+        z: 0,
+        interfaceOrientation: 0,
+        qw: 0,
+        qx: 0,
+        qy: 0,
+        qz: 0,
+        yaw: 0,
+        pitch: 0,
+        roll: 0,
+      },
+    },
+    unregister: NOOP,
+    isAvailable: false,
+    config: {
+      interval: 0,
+      adjustToInterfaceOrientation: false,
+      iosReferenceFrame: 0,
+    },
+  }),
 
   withTiming: (toValue, _, cb) => {
     cb && cb(true);
@@ -61,6 +126,7 @@ const ReanimatedV2 = {
     bounce: ID,
     bezier: () => ({ factory: ID }),
     bezierFn: ID,
+    steps: ID,
     in: ID,
     out: ID,
     inOut: ID,
@@ -74,6 +140,97 @@ const ReanimatedV2 = {
   runOnJS: (fn) => fn,
   runOnUI: (fn) => fn,
 };
+
+[
+  'FadeIn',
+  'FadeInRight',
+  'FadeInLeft',
+  'FadeInUp',
+  'FadeInDown',
+  'FadeOut',
+  'FadeOutRight',
+  'FadeOutLeft',
+  'FadeOutUp',
+  'FadeOutDown',
+
+  'FlipInYLeft',
+  'FlipInXDown',
+  'FlipInYRight',
+  'FlipInEasyX',
+  'FlipInEasyY',
+  'FlipOutXUp',
+  'FlipOutYLeft',
+  'FlipOutXDown',
+  'FlipOutYRight',
+  'FlipOutEasyX',
+  'FlipOutEasyY',
+
+  'StretchInY',
+  'StretchOutX',
+  'StretchOutY',
+  'SlideInLeft',
+  'SlideOutRight',
+  'SlideOutLeft',
+  'SlideInUp',
+  'SlideInDown',
+  'SlideOutUp',
+
+  'ZoomInRotate',
+  'ZoomInLeft',
+  'ZoomInRight',
+  'ZoomInUp',
+  'ZoomInDown',
+  'ZoomInEasyUp',
+  'ZoomInEasyDown',
+  'ZoomOut',
+  'ZoomOutRotate',
+  'ZoomOutLeft',
+  'ZoomOutRight',
+  'ZoomOutUp',
+  'ZoomOutDown',
+  'ZoomOutEasyUp',
+  'ZoomOutEasyDown',
+
+  'BounceIn',
+  'BounceInDown',
+  'BounceInUp',
+  'BounceInLeft',
+  'BounceInRight',
+  'BounceOut',
+  'BounceOutDown',
+  'BounceOutUp',
+  'BounceOutLeft',
+  'BounceOutRight',
+
+  'LightSpeedInLeft',
+  'LightSpeedOutRight',
+  'LightSpeedOutLeft',
+
+  'PinwheelOut',
+
+  'RotateInDownRight',
+  'RotateInUpLeft',
+  'RotateInUpRight',
+  'RotateOutDownLeft',
+  'RotateOutDownRight',
+  'RotateOutUpLeft',
+  'RotateOutUpRight',
+
+  'RollInRight',
+  'RollOutLeft',
+  'RollOutRight',
+
+  'Layout',
+  'CurvedTransition',
+  'JumpingTransition',
+  'SequencedTransition',
+  'FadingTransition',
+  'EntryExitTransition',
+].forEach((k) =>
+  Object.assign(ReanimatedV2, {
+    [k]: new BaseAnimationMock(),
+  })
+);
 
 module.exports = {
   ...ReanimatedV2,

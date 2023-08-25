@@ -1,7 +1,7 @@
-import { Timestamp, NestedObjectValues } from '../commonTypes';
-import MutableValue from './MutableValue';
+import type { Timestamp, NestedObjectValues } from '../commonTypes';
+import type MutableValue from './MutableValue';
 
-export interface Mapper<T> {
+interface Mapper<T> {
   MAPPER_ID?: number;
   id: number;
   inputs: MutableValue<T>[];
@@ -14,7 +14,7 @@ export interface Mapper<T> {
   ): MutableValue<T>[];
 }
 
-export interface MapperRegistry<T> {
+interface MapperRegistry<T> {
   sortedMappers: Mapper<T>[];
   mappers: Map<number, Mapper<T>>;
   _module: JSReanimated;
@@ -25,14 +25,13 @@ export interface MapperRegistry<T> {
   updateOrder(): void;
 }
 
-export interface JSReanimated {
+interface JSReanimated {
   _valueSetter?: <T>(value: T) => void;
   _renderRequested: boolean;
   _mapperRegistry: MapperRegistry<any>;
   _frames: ((timestamp: Timestamp) => void)[];
   timeProvider: { now: () => number };
   pushFrame(frame: (timestamp: Timestamp) => void): void;
-  getTimestamp(): number;
   maybeRequestRender(): void;
   _onRender(timestampMs: number): void;
   installCoreFunctions(valueSetter: <T>(value: T) => void): void;
@@ -45,7 +44,11 @@ export interface JSReanimated {
     outputs: NestedObjectValues<MutableValue<unknown>>[]
   ): number;
   stopMapper(mapperId: number): void;
-  registerEventHandler<T>(_: string, __: (event: T) => void): string;
+  registerEventHandler<T>(
+    eventHandler: (event: T) => void,
+    eventName: string,
+    emitterReactTag: number
+  ): string;
   unregisterEventHandler(_: string): void;
   enableLayoutAnimations(): void;
 }

@@ -3,6 +3,7 @@
 #include <fbjni/fbjni.h>
 #include <jsi/jsi.h>
 #include <memory>
+#include <string>
 #include "JNIHelper.h"
 
 namespace reanimated {
@@ -11,6 +12,16 @@ using namespace facebook::jni;
 using namespace facebook;
 
 class LayoutAnimations : public jni::HybridClass<LayoutAnimations> {
+  using AnimationStartingBlock =
+      std::function<void(int, int, alias_ref<JMap<jstring, jstring>>)>;
+  using HasAnimationBlock = std::function<bool(int, int)>;
+#ifdef DEBUG
+  using CheckDuplicateSharedTag = std::function<void(int, int)>;
+#endif
+  using ClearAnimationConfigBlock = std::function<void(int)>;
+  using CancelAnimationBlock = std::function<void(int)>;
+  using FindPrecedingViewTagForTransitionBlock = std::function<int(int)>;
+
  public:
   static auto constexpr kJavaDescriptor =
       "Lcom/swmansion/reanimated/layoutReanimation/LayoutAnimations;";
@@ -20,20 +31,46 @@ class LayoutAnimations : public jni::HybridClass<LayoutAnimations> {
 
   void startAnimationForTag(
       int tag,
-      alias_ref<JString> type,
+      int type,
       alias_ref<JMap<jstring, jstring>> values);
-  void removeConfigForTag(int tag);
+  bool hasAnimationForTag(int tag, int type);
   bool isLayoutAnimationEnabled();
 
-  void setWeakUIRuntime(std::weak_ptr<jsi::Runtime> wrt);
+  void setAnimationStartingBlock(AnimationStartingBlock animationStartingBlock);
+  void setHasAnimationBlock(HasAnimationBlock hasAnimationBlock);
+#ifdef DEBUG
+  void setCheckDuplicateSharedTag(
+      CheckDuplicateSharedTag checkDuplicateSharedTag);
+  void checkDuplicateSharedTag(int viewTag, int screenTag);
+#endif
+  void setClearAnimationConfigBlock(
+      ClearAnimationConfigBlock clearAnimationConfigBlock);
+  void setCancelAnimationForTag(CancelAnimationBlock cancelAnimationBlock);
+  void setFindPrecedingViewTagForTransition(
+      FindPrecedingViewTagForTransitionBlock
+          findPrecedingViewTagForTransitionBlock);
 
-  void notifyAboutProgress(const jsi::Value &progress, int tag);
-  void notifyAboutEnd(int tag, int cancelled);
+  void progressLayoutAnimation(
+      int tag,
+      const jni::local_ref<JNIHelper::PropsMap> &updates,
+      bool isSharedTransition);
+  void endLayoutAnimation(int tag, bool removeView);
+  void clearAnimationConfigForTag(int tag);
+  void cancelAnimationForTag(int tag);
+  int findPrecedingViewTagForTransition(int tag);
 
  private:
   friend HybridBase;
   jni::global_ref<LayoutAnimations::javaobject> javaPart_;
-  std::weak_ptr<jsi::Runtime> weakUIRuntime;
+  AnimationStartingBlock animationStartingBlock_;
+  HasAnimationBlock hasAnimationBlock_;
+  ClearAnimationConfigBlock clearAnimationConfigBlock_;
+  CancelAnimationBlock cancelAnimationBlock_;
+  FindPrecedingViewTagForTransitionBlock
+      findPrecedingViewTagForTransitionBlock_;
+#ifdef DEBUG
+  CheckDuplicateSharedTag checkDuplicateSharedTag_;
+#endif
 
   explicit LayoutAnimations(
       jni::alias_ref<LayoutAnimations::jhybridobject> jThis);

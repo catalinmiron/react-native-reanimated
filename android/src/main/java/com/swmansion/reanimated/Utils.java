@@ -8,7 +8,7 @@ import java.util.Map;
 
 public class Utils {
 
-  protected static boolean isChromeDebugger = false;
+  public static boolean isChromeDebugger = false;
 
   public static Map<String, Integer> processMapping(ReadableMap style) {
     ReadableMapKeySetIterator iter = style.keySetIterator();
@@ -28,5 +28,22 @@ public class Utils {
       res[i] = ary.getInt(i);
     }
     return res;
+  }
+
+  public static String simplifyStringNumbersList(String list) {
+    // transforms string: '[1, 2, 3]' -> '1 2 3'
+    // to make usage of std::istringstream in C++ easier
+    return list.replace(",", "").replace("[", "").replace("]", "");
+  }
+
+  public static float convertToFloat(Object value) {
+    if (value instanceof Integer) {
+      return ((Integer) value).floatValue();
+    } else if (value instanceof Float) {
+      return (float) value;
+    } else if (value instanceof Double) {
+      return ((Double) value).floatValue();
+    }
+    return 0;
   }
 }

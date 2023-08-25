@@ -11,8 +11,12 @@
 #elif JS_RUNTIME_V8
 #include <v8runtime/V8RuntimeFactory.h>
 #else
+#if REACT_NATIVE_MINOR_VERSION >= 71
+#include <jsc/JSCRuntime.h>
+#else
 #include <jsi/JSCRuntime.h>
-#endif
+#endif // REACT_NATIVE_MINOR_VERSION
+#endif // JS_RUNTIME
 
 namespace reanimated {
 
@@ -22,6 +26,7 @@ using namespace react;
 std::shared_ptr<jsi::Runtime> ReanimatedRuntime::make(
     jsi::Runtime *rnRuntime,
     std::shared_ptr<MessageQueueThread> jsQueue) {
+  (void)rnRuntime; // used only for V8
 #if JS_RUNTIME_HERMES
   std::unique_ptr<facebook::hermes::HermesRuntime> runtime =
       facebook::hermes::makeHermesRuntime();

@@ -1,16 +1,13 @@
-import {
+import type {
   ILayoutAnimationBuilder,
   LayoutAnimationsValues,
   LayoutAnimationFunction,
+  StylePropsWithArrayTransform,
 } from '../animationBuilder/commonTypes';
 import { BaseAnimationBuilder } from '../animationBuilder';
 import { withSequence, withTiming } from '../../animation';
 import { FadeIn, FadeOut } from '../defaultAnimations/Fade';
-import {
-  StyleProps,
-  TransformProperty,
-  AnimationObject,
-} from '../../commonTypes';
+import type { TransformProperty, AnimationObject } from '../../commonTypes';
 
 export class EntryExitTransition
   extends BaseAnimationBuilder
@@ -20,8 +17,10 @@ export class EntryExitTransition
 
   exitingV: BaseAnimationBuilder | typeof BaseAnimationBuilder = FadeOut;
 
-  static createInstance(): EntryExitTransition {
-    return new EntryExitTransition();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new EntryExitTransition() as InstanceType<T>;
   }
 
   static entering(
@@ -56,7 +55,9 @@ export class EntryExitTransition
     const delayFunction = this.getDelayFunction();
     const callback = this.callbackV;
     const delay = this.getDelay();
+    // @ts-ignore Calling `.build()` both static and instance methods works fine here, but `this` types are incompatible. They are not used though, so it's fine.
     const enteringAnimation = this.enteringV.build();
+    // @ts-ignore Calling `.build()` both static and instance methods works fine here, but `this` types are incompatible. They are not used though, so it's fine.
     const exitingAnimation = this.exitingV.build();
     const exitingDuration = this.exitingV.getDuration();
 
@@ -64,15 +65,19 @@ export class EntryExitTransition
       'worklet';
       const enteringValues = enteringAnimation(values);
       const exitingValues = exitingAnimation(values);
-      const animations: StyleProps = {
+      const animations: StylePropsWithArrayTransform = {
         transform: [],
       };
 
       for (const prop of Object.keys(exitingValues.animations)) {
-        if (prop === 'transform') {
-          exitingValues.animations[prop]?.forEach((value, index) => {
+        if (
+          prop === 'transform' &&
+          Array.isArray(exitingValues.animations.transform)
+        ) {
+          exitingValues.animations.transform.forEach((value, index) => {
             for (const transformProp of Object.keys(value)) {
-              animations.transform?.push({
+              // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+              animations.transform!.push({
                 [transformProp]: delayFunction(
                   delay,
                   withSequence(
@@ -114,10 +119,14 @@ export class EntryExitTransition
         }
       }
       for (const prop of Object.keys(enteringValues.animations)) {
-        if (prop === 'transform') {
-          enteringValues.animations[prop]?.forEach((value, index) => {
+        if (
+          prop === 'transform' &&
+          Array.isArray(enteringValues.animations.transform)
+        ) {
+          enteringValues.animations.transform.forEach((value, index) => {
             for (const transformProp of Object.keys(value)) {
-              animations.transform?.push({
+              // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+              animations.transform!.push({
                 [transformProp]: delayFunction(
                   delay + exitingDuration,
                   withSequence(
@@ -150,9 +159,14 @@ export class EntryExitTransition
       }
 
       const mergedTransform = (
-        exitingValues.initialValues.transform ?? []
+        Array.isArray(exitingValues.initialValues.transform)
+          ? exitingValues.initialValues.transform
+          : []
       ).concat(
-        (enteringValues.animations.transform ?? []).map((value) => {
+        (Array.isArray(enteringValues.animations.transform)
+          ? enteringValues.animations.transform
+          : []
+        ).map((value) => {
           const objectKeys = Object.keys(value);
           if (objectKeys?.length < 1) {
             console.error(
@@ -178,7 +192,6 @@ export class EntryExitTransition
           } else {
             return { [transformProp]: 1 } as unknown as TransformProperty;
           }
-          return value;
         })
       );
 

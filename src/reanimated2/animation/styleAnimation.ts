@@ -1,21 +1,20 @@
 import { defineAnimation } from './util';
-import {
+import type {
   Timestamp,
   AnimatableValue,
   AnimationObject,
   Animation,
-  AnimatedStyle,
   NestedObject,
   NestedObjectValues,
 } from '../commonTypes';
-import { StyleLayoutAnimation } from './commonTypes';
+import type { AnimatedStyle } from '../helperTypes';
+import type { StyleLayoutAnimation } from './commonTypes';
 import { withTiming } from './timing';
-import { ColorProperties } from '../UpdateProps';
-import { processColor } from '../Colors';
+import { ColorProperties, processColor } from '../Colors';
 
 // resolves path to value for nested objects
 // if path cannot be resolved returns undefined
-export function resolvePath<T>(
+function resolvePath<T>(
   obj: NestedObject<T>,
   path: AnimatableValue[] | AnimatableValue
 ): NestedObjectValues<T> | undefined {
@@ -24,7 +23,11 @@ export function resolvePath<T>(
   return keys.reduce<NestedObjectValues<T> | undefined>((acc, current) => {
     if (Array.isArray(acc) && typeof current === 'number') {
       return acc[current];
-    } else if (typeof acc === 'object' && (current as number | string) in acc) {
+    } else if (
+      acc !== null &&
+      typeof acc === 'object' &&
+      (current as number | string) in acc
+    ) {
       return (acc as { [key: string]: NestedObjectValues<T> })[
         current as number | string
       ];
@@ -35,7 +38,7 @@ export function resolvePath<T>(
 
 // set value at given path
 type Path = Array<string | number> | string | number;
-export function setPath<T>(
+function setPath<T>(
   obj: NestedObject<T>,
   path: Path,
   value: NestedObjectValues<T>
@@ -46,7 +49,7 @@ export function setPath<T>(
   for (let i = 0; i < keys.length - 1; i++) {
     // creates entry if there isn't one
     currObj = currObj as { [key: string]: NestedObjectValues<T> };
-    if (!currObj[keys[i]]) {
+    if (!(keys[i] in currObj)) {
       // if next key is a number create an array
       if (typeof keys[i + 1] === 'number') {
         currObj[keys[i]] = [];
@@ -67,7 +70,7 @@ interface NestedObjectEntry<T> {
 }
 
 export function withStyleAnimation(
-  styleAnimations: AnimatedStyle
+  styleAnimations: AnimatedStyle<any>
 ): StyleLayoutAnimation {
   'worklet';
   return defineAnimation<StyleLayoutAnimation>({}, () => {
@@ -139,7 +142,7 @@ export function withStyleAnimation(
 
     const onStart = (
       animation: StyleLayoutAnimation,
-      value: AnimatedStyle,
+      value: AnimatedStyle<any>,
       now: Timestamp,
       previousAnimation: StyleLayoutAnimation
     ): void => {
@@ -178,6 +181,13 @@ export function withStyleAnimation(
           if (prevAnimation && !prevVal) {
             prevVal = prevAnimation.current;
           }
+          if (prevVal === undefined) {
+            console.warn(
+              `Initial values for animation are missing for property ${currentEntry.path.join(
+                '.'
+              )}`
+            );
+          }
           setPath(animation.current, currentEntry.path, prevVal);
           let currentAnimation: AnimationObject;
           if (
@@ -187,7 +197,7 @@ export function withStyleAnimation(
             currentAnimation = withTiming(
               currentEntry.value as AnimatableValue,
               { duration: 0 }
-            );
+            ) as AnimationObject; // TODO TYPESCRIPT this temporary cast is to get rid of .d.ts file.
             setPath(
               animation.styleAnimations,
               currentEntry.path,

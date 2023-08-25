@@ -1,21 +1,21 @@
-import {
+import type {
   EntryAnimationsValues,
   ExitAnimationsValues,
   AnimationConfigFunction,
   IEntryAnimationBuilder,
   IExitAnimationBuilder,
 } from '../animationBuilder/commonTypes';
-import { Dimensions } from 'react-native';
+import type { BaseAnimationBuilder } from '../animationBuilder';
 import { ComplexAnimationBuilder } from '../animationBuilder';
-
-const { width, height } = Dimensions.get('window');
 
 export class SlideInRight
   extends ComplexAnimationBuilder
   implements IEntryAnimationBuilder
 {
-  static createInstance(): SlideInRight {
-    return new SlideInRight();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new SlideInRight() as InstanceType<T>;
   }
 
   build = (): AnimationConfigFunction<EntryAnimationsValues> => {
@@ -35,7 +35,7 @@ export class SlideInRight
           ),
         },
         initialValues: {
-          originX: values.targetOriginX + width,
+          originX: values.targetOriginX + values.windowWidth,
           ...initialValues,
         },
         callback: callback,
@@ -48,8 +48,10 @@ export class SlideInLeft
   extends ComplexAnimationBuilder
   implements IEntryAnimationBuilder
 {
-  static createInstance(): SlideInLeft {
-    return new SlideInLeft();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new SlideInLeft() as InstanceType<T>;
   }
 
   build = (): AnimationConfigFunction<EntryAnimationsValues> => {
@@ -69,7 +71,7 @@ export class SlideInLeft
           ),
         },
         initialValues: {
-          originX: values.targetOriginX - width,
+          originX: values.targetOriginX - values.windowWidth,
           ...initialValues,
         },
         callback: callback,
@@ -82,8 +84,10 @@ export class SlideOutRight
   extends ComplexAnimationBuilder
   implements IExitAnimationBuilder
 {
-  static createInstance(): SlideOutRight {
-    return new SlideOutRight();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new SlideOutRight() as InstanceType<T>;
   }
 
   build = (): AnimationConfigFunction<ExitAnimationsValues> => {
@@ -99,7 +103,13 @@ export class SlideOutRight
         animations: {
           originX: delayFunction(
             delay,
-            animation(Math.max(values.currentOriginX + width, width), config)
+            animation(
+              Math.max(
+                values.currentOriginX + values.windowWidth,
+                values.windowWidth
+              ),
+              config
+            )
           ),
         },
         initialValues: {
@@ -116,8 +126,10 @@ export class SlideOutLeft
   extends ComplexAnimationBuilder
   implements IExitAnimationBuilder
 {
-  static createInstance(): SlideOutLeft {
-    return new SlideOutLeft();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new SlideOutLeft() as InstanceType<T>;
   }
 
   build = (): AnimationConfigFunction<ExitAnimationsValues> => {
@@ -133,7 +145,13 @@ export class SlideOutLeft
         animations: {
           originX: delayFunction(
             delay,
-            animation(Math.min(values.currentOriginX - width, -width), config)
+            animation(
+              Math.min(
+                values.currentOriginX - values.windowWidth,
+                -values.windowWidth
+              ),
+              config
+            )
           ),
         },
         initialValues: {
@@ -150,8 +168,10 @@ export class SlideInUp
   extends ComplexAnimationBuilder
   implements IEntryAnimationBuilder
 {
-  static createInstance(): SlideInUp {
-    return new SlideInUp();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new SlideInUp() as InstanceType<T>;
   }
 
   build = (): AnimationConfigFunction<EntryAnimationsValues> => {
@@ -171,7 +191,7 @@ export class SlideInUp
           ),
         },
         initialValues: {
-          originY: -height,
+          originY: -values.windowHeight,
           ...initialValues,
         },
         callback: callback,
@@ -184,8 +204,10 @@ export class SlideInDown
   extends ComplexAnimationBuilder
   implements IEntryAnimationBuilder
 {
-  static createInstance(): SlideInDown {
-    return new SlideInDown();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new SlideInDown() as InstanceType<T>;
   }
 
   build = (): AnimationConfigFunction<EntryAnimationsValues> => {
@@ -205,7 +227,7 @@ export class SlideInDown
           ),
         },
         initialValues: {
-          originY: values.targetOriginY + height,
+          originY: values.targetOriginY + values.windowHeight,
           ...initialValues,
         },
         callback: callback,
@@ -218,8 +240,10 @@ export class SlideOutUp
   extends ComplexAnimationBuilder
   implements IExitAnimationBuilder
 {
-  static createInstance(): SlideOutUp {
-    return new SlideOutUp();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new SlideOutUp() as InstanceType<T>;
   }
 
   build = (): AnimationConfigFunction<ExitAnimationsValues> => {
@@ -235,7 +259,13 @@ export class SlideOutUp
         animations: {
           originY: delayFunction(
             delay,
-            animation(Math.min(values.currentOriginY - height, -height), config)
+            animation(
+              Math.min(
+                values.currentOriginY - values.windowHeight,
+                -values.windowHeight
+              ),
+              config
+            )
           ),
         },
         initialValues: { originY: values.currentOriginY, ...initialValues },
@@ -249,8 +279,10 @@ export class SlideOutDown
   extends ComplexAnimationBuilder
   implements IExitAnimationBuilder
 {
-  static createInstance(): SlideOutDown {
-    return new SlideOutDown();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new SlideOutDown() as InstanceType<T>;
   }
 
   build = (): AnimationConfigFunction<ExitAnimationsValues> => {
@@ -266,7 +298,13 @@ export class SlideOutDown
         animations: {
           originY: delayFunction(
             delay,
-            animation(Math.max(values.currentOriginY + height, height), config)
+            animation(
+              Math.max(
+                values.currentOriginY + values.windowHeight,
+                values.windowHeight
+              ),
+              config
+            )
           ),
         },
         initialValues: { originY: values.currentOriginY, ...initialValues },

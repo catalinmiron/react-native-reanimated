@@ -1,19 +1,19 @@
-import {
+import type {
   EntryExitAnimationFunction,
+  EntryExitAnimationsValues,
   IEntryExitAnimationBuilder,
 } from '../animationBuilder/commonTypes';
 import { withSequence, withTiming } from '../../animation';
-import { Dimensions } from 'react-native';
-import { ComplexAnimationBuilder } from '../animationBuilder/ComplexAnimationBuilder';
-
-const { width, height } = Dimensions.get('window');
-
+import type { BaseAnimationBuilder } from '../animationBuilder';
+import { ComplexAnimationBuilder } from '../animationBuilder';
 export class BounceIn
   extends ComplexAnimationBuilder
   implements IEntryExitAnimationBuilder
 {
-  static createInstance(): BounceIn {
-    return new BounceIn();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new BounceIn() as InstanceType<T>;
   }
 
   static getDuration(): number {
@@ -63,8 +63,10 @@ export class BounceInDown
   extends ComplexAnimationBuilder
   implements IEntryExitAnimationBuilder
 {
-  static createInstance(): BounceInDown {
-    return new BounceInDown();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new BounceInDown() as InstanceType<T>;
   }
 
   static getDuration(): number {
@@ -82,7 +84,7 @@ export class BounceInDown
     const callback = this.callbackV;
     const initialValues = this.initialValues;
 
-    return () => {
+    return (values: EntryExitAnimationsValues) => {
       'worklet';
       return {
         animations: {
@@ -103,7 +105,7 @@ export class BounceInDown
         initialValues: {
           transform: [
             {
-              translateY: height,
+              translateY: values.windowHeight,
             },
           ],
           ...initialValues,
@@ -118,8 +120,10 @@ export class BounceInUp
   extends ComplexAnimationBuilder
   implements IEntryExitAnimationBuilder
 {
-  static createInstance(): BounceInUp {
-    return new BounceInUp();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new BounceInUp() as InstanceType<T>;
   }
 
   static getDuration(): number {
@@ -137,7 +141,7 @@ export class BounceInUp
     const callback = this.callbackV;
     const initialValues = this.initialValues;
 
-    return () => {
+    return (values: EntryExitAnimationsValues) => {
       'worklet';
       return {
         animations: {
@@ -156,7 +160,7 @@ export class BounceInUp
           ],
         },
         initialValues: {
-          transform: [{ translateY: -height }],
+          transform: [{ translateY: -values.windowHeight }],
           ...initialValues,
         },
         callback: callback,
@@ -169,8 +173,10 @@ export class BounceInLeft
   extends ComplexAnimationBuilder
   implements IEntryExitAnimationBuilder
 {
-  static createInstance(): BounceInLeft {
-    return new BounceInLeft();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new BounceInLeft() as InstanceType<T>;
   }
 
   static getDuration(): number {
@@ -188,7 +194,7 @@ export class BounceInLeft
     const callback = this.callbackV;
     const initialValues = this.initialValues;
 
-    return () => {
+    return (values: EntryExitAnimationsValues) => {
       'worklet';
       return {
         animations: {
@@ -207,7 +213,7 @@ export class BounceInLeft
           ],
         },
         initialValues: {
-          transform: [{ translateX: -width }],
+          transform: [{ translateX: -values.windowWidth }],
           ...initialValues,
         },
         callback: callback,
@@ -220,8 +226,10 @@ export class BounceInRight
   extends ComplexAnimationBuilder
   implements IEntryExitAnimationBuilder
 {
-  static createInstance(): BounceInRight {
-    return new BounceInRight();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new BounceInRight() as InstanceType<T>;
   }
 
   static getDuration(): number {
@@ -239,7 +247,7 @@ export class BounceInRight
     const callback = this.callbackV;
     const initialValues = this.initialValues;
 
-    return () => {
+    return (values: EntryExitAnimationsValues) => {
       'worklet';
       return {
         animations: {
@@ -258,7 +266,7 @@ export class BounceInRight
           ],
         },
         initialValues: {
-          transform: [{ translateX: width }],
+          transform: [{ translateX: values.windowWidth }],
           ...initialValues,
         },
         callback: callback,
@@ -271,8 +279,10 @@ export class BounceOut
   extends ComplexAnimationBuilder
   implements IEntryExitAnimationBuilder
 {
-  static createInstance(): BounceOut {
-    return new BounceOut();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new BounceOut() as InstanceType<T>;
   }
 
   static getDuration(): number {
@@ -322,8 +332,10 @@ export class BounceOutDown
   extends ComplexAnimationBuilder
   implements IEntryExitAnimationBuilder
 {
-  static createInstance(): BounceOutDown {
-    return new BounceOutDown();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new BounceOutDown() as InstanceType<T>;
   }
 
   static getDuration(): number {
@@ -341,7 +353,7 @@ export class BounceOutDown
     const callback = this.callbackV;
     const initialValues = this.initialValues;
 
-    return () => {
+    return (values: EntryExitAnimationsValues) => {
       'worklet';
       return {
         animations: {
@@ -353,7 +365,7 @@ export class BounceOutDown
                   withTiming(-10, { duration: duration * 0.15 }),
                   withTiming(10, { duration: duration * 0.15 }),
                   withTiming(-20, { duration: duration * 0.15 }),
-                  withTiming(height, {
+                  withTiming(values.windowHeight, {
                     duration: duration * 0.55,
                   })
                 )
@@ -375,8 +387,10 @@ export class BounceOutUp
   extends ComplexAnimationBuilder
   implements IEntryExitAnimationBuilder
 {
-  static createInstance(): BounceOutUp {
-    return new BounceOutUp();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new BounceOutUp() as InstanceType<T>;
   }
 
   static getDuration(): number {
@@ -394,7 +408,7 @@ export class BounceOutUp
     const callback = this.callbackV;
     const initialValues = this.initialValues;
 
-    return () => {
+    return (values: EntryExitAnimationsValues) => {
       'worklet';
       return {
         animations: {
@@ -406,7 +420,7 @@ export class BounceOutUp
                   withTiming(10, { duration: duration * 0.15 }),
                   withTiming(-10, { duration: duration * 0.15 }),
                   withTiming(20, { duration: duration * 0.15 }),
-                  withTiming(-height, {
+                  withTiming(-values.windowHeight, {
                     duration: duration * 0.55,
                   })
                 )
@@ -428,8 +442,10 @@ export class BounceOutLeft
   extends ComplexAnimationBuilder
   implements IEntryExitAnimationBuilder
 {
-  static createInstance(): BounceOutRight {
-    return new BounceOutLeft();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new BounceOutLeft() as InstanceType<T>;
   }
 
   static getDuration(): number {
@@ -447,7 +463,7 @@ export class BounceOutLeft
     const callback = this.callbackV;
     const initialValues = this.initialValues;
 
-    return () => {
+    return (values: EntryExitAnimationsValues) => {
       'worklet';
       return {
         animations: {
@@ -459,7 +475,7 @@ export class BounceOutLeft
                   withTiming(10, { duration: duration * 0.15 }),
                   withTiming(-10, { duration: duration * 0.15 }),
                   withTiming(20, { duration: duration * 0.15 }),
-                  withTiming(-width, {
+                  withTiming(-values.windowWidth, {
                     duration: duration * 0.55,
                   })
                 )
@@ -481,8 +497,10 @@ export class BounceOutRight
   extends ComplexAnimationBuilder
   implements IEntryExitAnimationBuilder
 {
-  static createInstance(): BounceOutRight {
-    return new BounceOutRight();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new BounceOutRight() as InstanceType<T>;
   }
 
   static getDuration(): number {
@@ -500,7 +518,7 @@ export class BounceOutRight
     const callback = this.callbackV;
     const initialValues = this.initialValues;
 
-    return () => {
+    return (values: EntryExitAnimationsValues) => {
       'worklet';
       return {
         animations: {
@@ -512,7 +530,7 @@ export class BounceOutRight
                   withTiming(-10, { duration: duration * 0.15 }),
                   withTiming(10, { duration: duration * 0.15 }),
                   withTiming(-20, { duration: duration * 0.15 }),
-                  withTiming(width, {
+                  withTiming(values.windowWidth, {
                     duration: duration * 0.55,
                   })
                 )

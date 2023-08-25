@@ -1,144 +1,307 @@
-import MapperRegistry from './MapperRegistry';
-import Mapper from './Mapper';
-import MutableValue from './MutableValue';
-import { NativeReanimated } from '../NativeReanimated/NativeReanimated';
 import {
-  Timestamp,
-  NestedObjectValues,
-  AnimatedKeyboardInfo,
+  isChromeDebugger,
+  isJest,
+  isWeb,
+  isWindowAvailable,
+} from '../PlatformChecker';
+import type {
+  ShareableRef,
+  ShareableSyncDataHolderRef,
+  Value3D,
+  ValueRotation,
 } from '../commonTypes';
-import { isJest } from '../PlatformChecker';
+import { SensorType } from '../commonTypes';
+import type { WebSensor } from './WebSensor';
 
-export default class JSReanimated extends NativeReanimated {
-  _valueSetter?: <T>(value: T) => void = undefined;
+export default class JSReanimated {
+  native = false;
+  nextSensorId = 0;
+  sensors = new Map<number, WebSensor>();
+  platform?: Platform = undefined;
 
-  _renderRequested = false;
-  _mapperRegistry: MapperRegistry<any> = new MapperRegistry(this);
-  _frames: ((timestamp: Timestamp) => void)[] = [];
-  timeProvider: { now: () => number };
-
-  constructor() {
-    super(false);
-    if (isJest()) {
-      this.timeProvider = { now: () => global.ReanimatedDataMock.now() };
-    } else {
-      this.timeProvider = { now: () => window.performance.now() };
-    }
+  makeShareableClone<T>(): ShareableRef<T> {
+    throw new Error(
+      '[Reanimated] makeShareableClone should never be called in JSReanimated.'
+    );
   }
 
-  pushFrame(frame: (timestamp: Timestamp) => void): void {
-    this._frames.push(frame);
-    this.maybeRequestRender();
-  }
-
-  getTimestamp(): number {
-    return this.timeProvider.now();
-  }
-
-  maybeRequestRender(): void {
-    if (!this._renderRequested) {
-      this._renderRequested = true;
-
-      requestAnimationFrame((_timestampMs) => {
-        this._renderRequested = false;
-
-        this._onRender(this.getTimestamp());
-      });
-    }
-  }
-
-  _onRender(timestampMs: number): void {
-    this._mapperRegistry.execute();
-
-    const frames = [...this._frames];
-    this._frames = [];
-
-    for (let i = 0, len = frames.length; i < len; ++i) {
-      frames[i](timestampMs);
-    }
-
-    if (this._mapperRegistry.needRunOnRender) {
-      this._mapperRegistry.execute();
-    }
-  }
-
-  installCoreFunctions(valueSetter: <T>(value: T) => void): void {
-    this._valueSetter = valueSetter;
-  }
-
-  makeShareable<T>(value: T): T {
-    return value;
-  }
-
-  makeMutable<T>(value: T): MutableValue<T> {
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    return new MutableValue(value, this._valueSetter!);
-  }
-
-  makeRemote<T>(object = {}): T {
-    return object as T;
-  }
-
-  startMapper(
-    mapper: () => void,
-    inputs: NestedObjectValues<MutableValue<unknown>>[] = [],
-    outputs: NestedObjectValues<MutableValue<unknown>>[] = []
-  ): number {
-    const instance = new Mapper(this, mapper, inputs, outputs);
-    const mapperId = this._mapperRegistry.startMapper(instance);
-    this.maybeRequestRender();
-    return mapperId;
-  }
-
-  stopMapper(mapperId: number): void {
-    this._mapperRegistry.stopMapper(mapperId);
-  }
-
-  registerEventHandler<T>(_: string, __: (event: T) => void): string {
+  installCoreFunctions(
+    _callGuard: <T extends Array<unknown>, U>(
+      fn: (...args: T) => U,
+      ...args: T
+    ) => void,
+    _valueUnpacker: <T>(value: T) => T
+  ): void {
     // noop
-    return '';
   }
 
-  unregisterEventHandler(_: string): void {
+  scheduleOnUI<T>(worklet: ShareableRef<T>) {
+    // @ts-ignore web implementation has still not been updated after the rewrite, this will be addressed once the web implementation updates are ready
+    requestAnimationFrame(worklet);
+  }
+
+  registerEventHandler<T>(
+    _eventHandler: ShareableRef<T>,
+    _eventName: string,
+    _emitterReactTag: number
+  ): number {
+    // noop
+    return -1;
+  }
+
+  unregisterEventHandler(_: number): void {
     // noop
   }
 
   enableLayoutAnimations() {
-    console.warn(
-      '[Reanimated] enableLayoutAnimations is not available for WEB yet'
-    );
-  }
-
-  registerSensor(): number {
-    console.warn('[Reanimated] useAnimatedSensor is not available on web yet.');
-    return -1;
-  }
-
-  unregisterSensor(): void {
-    // noop
-  }
-
-  jestResetModule() {
-    if (isJest()) {
-      /**
-       * If someone used timers to stop animation before the end,
-       * then _renderRequested was set as true
-       * and any new update from another test wasn't applied.
-       */
-      this._renderRequested = false;
+    if (isWeb()) {
+      console.warn(
+        '[Reanimated] Layout Animations are not supported on web yet.'
+      );
+    } else if (isChromeDebugger()) {
+      console.warn(
+        '[Reanimated] Layout Animations are no-ops when using Chrome Debugger.'
+      );
+    } else if (isJest()) {
+      console.warn(
+        '[Reanimated] Layout Animations are no-ops when using Jest.'
+      );
     } else {
-      throw Error('This method can be only use in Jest testing.');
+      console.warn(
+        '[Reanimated] Layout Animations are not supported on this configuration.'
+      );
     }
   }
 
-  subscribeForKeyboardEvents(_: AnimatedKeyboardInfo): number {
-    console.warn(
-      '[Reanimated] useAnimatedKeyboard is not available on web yet.'
+  configureLayoutAnimation() {
+    // no-op
+  }
+
+  registerSensor(
+    sensorType: SensorType,
+    interval: number,
+    _iosReferenceFrame: number,
+    eventHandler: ShareableRef<(data: Value3D | ValueRotation) => void>
+  ): number {
+    if (!isWindowAvailable()) {
+      // the window object is unavailable when building the server portion of a site that uses SSG
+      // this check is here to ensure that the server build won't fail
+      return -1;
+    }
+
+    if (this.platform === undefined) {
+      this.detectPlatform();
+    }
+
+    if (!(this.getSensorName(sensorType) in window)) {
+      // https://w3c.github.io/sensors/#secure-context
+      console.warn(
+        '[Reanimated] Sensor is not available.' +
+          (isWeb() && location.protocol !== 'https:'
+            ? ' Make sure you use secure origin with `npx expo start --web --https`.'
+            : '') +
+          (this.platform === Platform.WEB_IOS
+            ? ' For iOS web, you will also have to also grant permission in the browser: https://dev.to/li/how-to-requestpermission-for-devicemotion-and-deviceorientation-events-in-ios-13-46g2.'
+            : '')
+      );
+      return -1;
+    }
+
+    if (this.platform === undefined) {
+      this.detectPlatform();
+    }
+
+    const sensor: WebSensor = this.initializeSensor(sensorType, interval);
+    sensor.addEventListener(
+      'reading',
+      this.getSensorCallback(sensor, sensorType, eventHandler)
     );
+    sensor.start();
+
+    this.sensors.set(this.nextSensorId, sensor);
+    return this.nextSensorId++;
+  }
+
+  getSensorCallback = (
+    sensor: WebSensor,
+    sensorType: SensorType,
+    eventHandler: ShareableRef<(data: Value3D | ValueRotation) => void>
+  ) => {
+    switch (sensorType) {
+      case SensorType.ACCELEROMETER:
+      case SensorType.GRAVITY:
+        return () => {
+          let { x, y, z } = sensor;
+
+          // Web Android sensors have a different coordinate system than iOS
+          if (this.platform === Platform.WEB_ANDROID) {
+            [x, y, z] = [-x, -y, -z];
+          }
+          // TODO TYPESCRIPT on web ShareableRef is the value itself so we call it directly
+          (eventHandler as any)({ x, y, z, interfaceOrientation: 0 });
+        };
+      case SensorType.GYROSCOPE:
+      case SensorType.MAGNETIC_FIELD:
+        return () => {
+          const { x, y, z } = sensor;
+          // TODO TYPESCRIPT on web ShareableRef is the value itself so we call it directly
+          (eventHandler as any)({ x, y, z, interfaceOrientation: 0 });
+        };
+      case SensorType.ROTATION:
+        return () => {
+          let [qw, qx, qy, qz] = sensor.quaternion;
+
+          // Android sensors have a different coordinate system than iOS
+          if (this.platform === Platform.WEB_ANDROID) {
+            [qy, qz] = [qz, -qy];
+          }
+
+          // reference: https://stackoverflow.com/questions/5782658/extracting-yaw-from-a-quaternion
+          const yaw = -Math.atan2(
+            2.0 * (qy * qz + qw * qx),
+            qw * qw - qx * qx - qy * qy + qz * qz
+          );
+          const pitch = Math.sin(-2.0 * (qx * qz - qw * qy));
+          const roll = -Math.atan2(
+            2.0 * (qx * qy + qw * qz),
+            qw * qw + qx * qx - qy * qy - qz * qz
+          );
+          // TODO TYPESCRIPT on web ShareableRef is the value itself so we call it directly
+          (eventHandler as any)({
+            qw,
+            qx,
+            qy,
+            qz,
+            yaw,
+            pitch,
+            roll,
+            interfaceOrientation: 0,
+          });
+        };
+    }
+  };
+
+  unregisterSensor(id: number): void {
+    const sensor: WebSensor | undefined = this.sensors.get(id);
+    if (sensor !== undefined) {
+      sensor.stop();
+      this.sensors.delete(id);
+    }
+  }
+
+  subscribeForKeyboardEvents(_: ShareableRef<number>): number {
+    if (isWeb()) {
+      console.warn(
+        '[Reanimated] useAnimatedKeyboard is not available on web yet.'
+      );
+    } else if (isChromeDebugger()) {
+      console.warn(
+        '[Reanimated] useAnimatedKeyboard is not available when using Chrome Debugger.'
+      );
+    } else if (isJest()) {
+      console.warn(
+        '[Reanimated] useAnimatedKeyboard is not available when using Jest.'
+      );
+    } else {
+      console.warn(
+        '[Reanimated] useAnimatedKeyboard is not available on this configuration.'
+      );
+    }
     return -1;
   }
 
   unsubscribeFromKeyboardEvents(_: number): void {
     // noop
+  }
+
+  initializeSensor(sensorType: SensorType, interval: number): WebSensor {
+    const config =
+      interval <= 0
+        ? { referenceFrame: 'device' }
+        : { frequency: 1000 / interval };
+    switch (sensorType) {
+      case SensorType.ACCELEROMETER:
+        return new window.Accelerometer(config);
+      case SensorType.GYROSCOPE:
+        return new window.Gyroscope(config);
+      case SensorType.GRAVITY:
+        return new window.GravitySensor(config);
+      case SensorType.MAGNETIC_FIELD:
+        return new window.Magnetometer(config);
+      case SensorType.ROTATION:
+        return new window.AbsoluteOrientationSensor(config);
+    }
+  }
+
+  getSensorName(sensorType: SensorType): string {
+    switch (sensorType) {
+      case SensorType.ACCELEROMETER:
+        return 'Accelerometer';
+      case SensorType.GRAVITY:
+        return 'GravitySensor';
+      case SensorType.GYROSCOPE:
+        return 'Gyroscope';
+      case SensorType.MAGNETIC_FIELD:
+        return 'Magnetometer';
+      case SensorType.ROTATION:
+        return 'AbsoluteOrientationSensor';
+    }
+  }
+
+  detectPlatform() {
+    const userAgent = navigator.userAgent || navigator.vendor || window.opera;
+    if (userAgent === undefined) {
+      this.platform = Platform.UNKNOWN;
+    } else if (/iPad|iPhone|iPod/.test(userAgent)) {
+      this.platform = Platform.WEB_IOS;
+    } else if (/android/i.test(userAgent)) {
+      this.platform = Platform.WEB_ANDROID;
+    } else {
+      this.platform = Platform.WEB;
+    }
+  }
+
+  makeSynchronizedDataHolder<T>(
+    _valueRef: ShareableRef<T>
+  ): ShareableSyncDataHolderRef<T> {
+    throw new Error(
+      '[Reanimated] makeSynchronizedDataHolder is not available in JSReanimated.'
+    );
+  }
+
+  getDataSynchronously<T>(_ref: ShareableSyncDataHolderRef<T>): T {
+    throw new Error(
+      '[Reanimated] getDataSynchronously is not available in JSReanimated.'
+    );
+  }
+
+  getViewProp<T>(
+    _viewTag: number,
+    _propName: string,
+    _callback?: (result: T) => void
+  ): Promise<T> {
+    throw new Error(
+      '[Reanimated] getViewProp is not available in JSReanimated.'
+    );
+  }
+
+  configureProps() {
+    throw new Error(
+      '[Reanimated] configureProps is not available in JSReanimated.'
+    );
+  }
+}
+
+enum Platform {
+  WEB_IOS = 'web iOS',
+  WEB_ANDROID = 'web Android',
+  WEB = 'web',
+  UNKNOWN = 'unknown',
+}
+
+declare global {
+  interface Navigator {
+    userAgent?: string;
+    vendor?: string;
   }
 }

@@ -1,50 +1,129 @@
 import { NativeModules } from 'react-native';
-import {
-  SharedValue,
-  SensorValue3D,
-  SensorValueRotation,
-  AnimatedKeyboardInfo,
+import type {
+  ShareableRef,
+  ShareableSyncDataHolderRef,
+  Value3D,
+  ValueRotation,
 } from '../commonTypes';
-import { Descriptor } from '../hook/commonTypes';
+import type {
+  LayoutAnimationFunction,
+  LayoutAnimationType,
+} from '../layoutReanimation';
+import { checkCppVersion } from '../platform-specific/checkCppVersion';
+
+// this is the type of `__reanimatedModuleProxy` which is injected using JSI
+export interface NativeReanimatedModule {
+  installCoreFunctions(
+    callGuard: <T extends Array<unknown>, U>(
+      fn: (...args: T) => U,
+      ...args: T
+    ) => void,
+    valueUnpacker: <T>(value: T) => T
+  ): void;
+  makeShareableClone<T>(
+    value: T,
+    shouldPersistRemote: boolean
+  ): ShareableRef<T>;
+  makeSynchronizedDataHolder<T>(
+    valueRef: ShareableRef<T>
+  ): ShareableSyncDataHolderRef<T>;
+  getDataSynchronously<T>(ref: ShareableSyncDataHolderRef<T>): T;
+  scheduleOnUI<T>(shareable: ShareableRef<T>): void;
+  registerEventHandler<T>(
+    eventHandler: ShareableRef<T>,
+    eventName: string,
+    emitterReactTag: number
+  ): number;
+  unregisterEventHandler(id: number): void;
+  getViewProp<T>(
+    viewTag: number,
+    propName: string,
+    callback?: (result: T) => void
+  ): Promise<T>;
+  enableLayoutAnimations(flag: boolean): void;
+  registerSensor(
+    sensorType: number,
+    interval: number,
+    iosReferenceFrame: number,
+    handler: ShareableRef<(data: Value3D | ValueRotation) => void>
+  ): number;
+  unregisterSensor(sensorId: number): void;
+  configureProps(uiProps: string[], nativeProps: string[]): void;
+  subscribeForKeyboardEvents(
+    handler: ShareableRef<number>,
+    isStatusBarTranslucent: boolean
+  ): number;
+  unsubscribeFromKeyboardEvents(listenerId: number): void;
+  configureLayoutAnimation(
+    viewTag: number,
+    type: LayoutAnimationType,
+    sharedTransitionTag: string,
+    config: ShareableRef<Keyframe | LayoutAnimationFunction>
+  ): void;
+}
 
 export class NativeReanimated {
-  native: boolean;
-  private InnerNativeModule: any;
+  native = true;
+  private InnerNativeModule: NativeReanimatedModule;
 
-  constructor(native = true) {
-    if (global.__reanimatedModuleProxy === undefined && native) {
+  constructor() {
+    if (global.__reanimatedModuleProxy === undefined) {
       const { ReanimatedModule } = NativeModules;
       ReanimatedModule?.installTurboModule();
     }
+    if (global.__reanimatedModuleProxy === undefined) {
+      throw new Error(
+        `[Reanimated] Native part of Reanimated doesn't seem to be initialized.
+See https://docs.swmansion.com/react-native-reanimated/docs/guides/troubleshooting#Native-part-of-reanimated-doesnt-seem-to-be-initialized for more details.`
+      );
+    }
+    checkCppVersion();
     this.InnerNativeModule = global.__reanimatedModuleProxy;
-    this.native = native;
   }
 
-  installCoreFunctions(valueSetter: <T>(value: T) => void): void {
-    return this.InnerNativeModule.installCoreFunctions(valueSetter);
+  installCoreFunctions(
+    callGuard: <T extends Array<unknown>, U>(
+      fn: (...args: T) => U,
+      ...args: T
+    ) => void,
+    valueUnpacker: <T>(value: T) => T
+  ) {
+    return this.InnerNativeModule.installCoreFunctions(
+      callGuard,
+      valueUnpacker
+    );
   }
 
-  makeShareable<T>(value: T): T {
-    return this.InnerNativeModule.makeShareable(value);
+  makeShareableClone<T>(value: T, shouldPersistRemote: boolean) {
+    return this.InnerNativeModule.makeShareableClone(
+      value,
+      shouldPersistRemote
+    );
   }
 
-  makeMutable<T>(value: T): SharedValue<T> {
-    return this.InnerNativeModule.makeMutable(value);
+  makeSynchronizedDataHolder<T>(valueRef: ShareableRef<T>) {
+    return this.InnerNativeModule.makeSynchronizedDataHolder(valueRef);
   }
 
-  makeRemote<T>(object = {}): T {
-    return this.InnerNativeModule.makeRemote(object);
+  getDataSynchronously<T>(ref: ShareableSyncDataHolderRef<T>) {
+    return this.InnerNativeModule.getDataSynchronously(ref);
+  }
+
+  scheduleOnUI<T>(shareable: ShareableRef<T>) {
+    return this.InnerNativeModule.scheduleOnUI(shareable);
   }
 
   registerSensor(
     sensorType: number,
     interval: number,
-    sensorData: SensorValue3D | SensorValueRotation
+    iosReferenceFrame: number,
+    handler: ShareableRef<(data: Value3D | ValueRotation) => void>
   ) {
     return this.InnerNativeModule.registerSensor(
       sensorType,
       interval,
-      sensorData
+      iosReferenceFrame,
+      handler
     );
   }
 
@@ -52,58 +131,63 @@ export class NativeReanimated {
     return this.InnerNativeModule.unregisterSensor(sensorId);
   }
 
-  startMapper(
-    mapper: () => void,
-    inputs: any[] = [],
-    outputs: any[] = [],
-    updater: () => void,
-    viewDescriptors: Descriptor[] | SharedValue<Descriptor[]>
-  ): number {
-    return this.InnerNativeModule.startMapper(
-      mapper,
-      inputs,
-      outputs,
-      updater,
-      viewDescriptors
+  registerEventHandler<T>(
+    eventHandler: ShareableRef<T>,
+    eventName: string,
+    emitterReactTag: number
+  ) {
+    return this.InnerNativeModule.registerEventHandler(
+      eventHandler,
+      eventName,
+      emitterReactTag
     );
   }
 
-  stopMapper(mapperId: number): void {
-    return this.InnerNativeModule.stopMapper(mapperId);
-  }
-
-  registerEventHandler<T>(
-    eventHash: string,
-    eventHandler: (event: T) => void
-  ): string {
-    return this.InnerNativeModule.registerEventHandler(eventHash, eventHandler);
-  }
-
-  unregisterEventHandler(id: string): void {
+  unregisterEventHandler(id: number) {
     return this.InnerNativeModule.unregisterEventHandler(id);
   }
 
   getViewProp<T>(
-    viewTag: string,
+    viewTag: number,
     propName: string,
     callback?: (result: T) => void
-  ): Promise<T> {
+  ) {
     return this.InnerNativeModule.getViewProp(viewTag, propName, callback);
   }
 
-  enableLayoutAnimations(flag: boolean): void {
+  configureLayoutAnimation(
+    viewTag: number,
+    type: LayoutAnimationType,
+    sharedTransitionTag: string,
+    config: ShareableRef<Keyframe | LayoutAnimationFunction>
+  ) {
+    this.InnerNativeModule.configureLayoutAnimation(
+      viewTag,
+      type,
+      sharedTransitionTag,
+      config
+    );
+  }
+
+  enableLayoutAnimations(flag: boolean) {
     this.InnerNativeModule.enableLayoutAnimations(flag);
   }
 
-  configureProps(uiProps: string[], nativeProps: string[]): void {
+  configureProps(uiProps: string[], nativeProps: string[]) {
     this.InnerNativeModule.configureProps(uiProps, nativeProps);
   }
 
-  subscribeForKeyboardEvents(keyboardEventData: AnimatedKeyboardInfo): number {
-    return this.InnerNativeModule.subscribeForKeyboardEvents(keyboardEventData);
+  subscribeForKeyboardEvents(
+    handler: ShareableRef<number>,
+    isStatusBarTranslucent: boolean
+  ) {
+    return this.InnerNativeModule.subscribeForKeyboardEvents(
+      handler,
+      isStatusBarTranslucent
+    );
   }
 
-  unsubscribeFromKeyboardEvents(listenerId: number): void {
+  unsubscribeFromKeyboardEvents(listenerId: number) {
     this.InnerNativeModule.unsubscribeFromKeyboardEvents(listenerId);
   }
 }

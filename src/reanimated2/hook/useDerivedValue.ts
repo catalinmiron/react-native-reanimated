@@ -1,17 +1,24 @@
 import { useEffect, useRef } from 'react';
 import { initialUpdaterRun } from '../animation';
-import { BasicWorkletFunction, SharedValue } from '../commonTypes';
+import type { BasicWorkletFunction, SharedValue } from '../commonTypes';
 import { makeMutable, startMapper, stopMapper } from '../core';
-import { DependencyList } from './commonTypes';
+import type { DependencyList } from './commonTypes';
+import { shouldBeUseWeb } from '../PlatformChecker';
 
 export type DerivedValue<T> = Readonly<SharedValue<T>>;
 
 export function useDerivedValue<T>(
   processor: BasicWorkletFunction<T>,
-  dependencies: DependencyList
+  dependencies?: DependencyList
 ): DerivedValue<T> {
   const initRef = useRef<SharedValue<T> | null>(null);
-  const inputs = Object.values(processor._closure ?? {});
+  let inputs = Object.values(processor.__closure ?? {});
+  if (shouldBeUseWeb()) {
+    if (!inputs.length && dependencies?.length) {
+      // let web work without a Babel/SWC plugin
+      inputs = dependencies;
+    }
+  }
 
   // build dependencies
   if (dependencies === undefined) {

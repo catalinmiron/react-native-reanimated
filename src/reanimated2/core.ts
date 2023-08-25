@@ -1,107 +1,56 @@
-/* global _WORKLET _getCurrentTime _frameTimestamp _eventTimestamp _setGlobalConsole */
 import NativeReanimatedModule from './NativeReanimated';
-import { Platform } from 'react-native';
-import { nativeShouldBeMock, shouldBeUseWeb, isWeb } from './PlatformChecker';
-import {
-  BasicWorkletFunction,
-  ComplexWorkletFunction,
+import { nativeShouldBeMock, isWeb } from './PlatformChecker';
+import type {
+  AnimatedKeyboardOptions,
+  SensorConfig,
+  SensorType,
   SharedValue,
-  AnimationObject,
-  AnimatableValue,
-  Timestamp,
+  Value3D,
+  ValueRotation,
 } from './commonTypes';
-import { Descriptor } from './hook/commonTypes';
-import JSReanimated from './js-reanimated/JSReanimated';
+import { makeShareableCloneRecursive } from './shareables';
+import type {
+  LayoutAnimationFunction,
+  LayoutAnimationType,
+} from './layoutReanimation';
+import { initializeUIRuntime } from './initializers';
+import type {
+  ProgressAnimationCallback,
+  SharedTransitionAnimationsFunction,
+} from './layoutReanimation/animationBuilder/commonTypes';
+import { SensorContainer } from './SensorContainer';
 
-if (global._setGlobalConsole === undefined) {
-  // it can happen when Reanimated plugin wasn't added, but the user uses the only API from version 1
-  global._setGlobalConsole = () => {
-    // noop
-  };
-}
+export { startMapper, stopMapper } from './mappers';
+export { runOnJS, runOnUI } from './threads';
+export { makeShareable } from './shareables';
+export { makeMutable, makeRemote } from './mutables';
 
-export type ReanimatedConsole = Pick<
-  Console,
-  'debug' | 'log' | 'warn' | 'info' | 'error'
->;
+/**
+ * @returns `true` in Reanimated 3, doesn't exist in Reanimated 2 or 1
+ */
+export const isReanimated3 = () => true;
 
-export type WorkletValue =
-  | (() => AnimationObject)
-  | AnimationObject
-  | AnimatableValue
-  | Descriptor;
-interface WorkletValueSetterContext {
-  _animation?: AnimationObject | null;
-  _value?: AnimatableValue | Descriptor;
-  value?: AnimatableValue;
-  _setValue?: (val: AnimatableValue | Descriptor) => void;
-}
+// Superseded by check in `/src/threads.ts`.
+// Used by `react-navigation` to detect if using Reanimated 2 or 3.
+/**
+ * @deprecated This function was superseded by other checks.
+ * We keep it here for backward compatibility reasons.
+ * If you need to check if you are using Reanimated 3 or Reanimated 2
+ * please use `isReanimated3` function instead.
+ * @returns `true` in Reanimated 3, doesn't exist in Reanimated 2
+ */
+export const isConfigured = isReanimated3;
 
-const testWorklet: BasicWorkletFunction<void> = () => {
-  'worklet';
-};
-
-const throwUninitializedReanimatedException = () => {
-  throw new Error(
-    "Failed to initialize react-native-reanimated library, make sure you followed installation steps here: https://docs.swmansion.com/react-native-reanimated/docs/fundamentals/installation/ \n1) Make sure reanimated's babel plugin is installed in your babel.config.js (you should have 'react-native-reanimated/plugin' listed there - also see the above link for details) \n2) Make sure you reset build cache after updating the config, run: yarn start --reset-cache"
-  );
-};
-
-export const checkPluginState: (throwError: boolean) => boolean = (
-  throwError = true
-) => {
-  if (!testWorklet.__workletHash && !shouldBeUseWeb()) {
-    if (throwError) {
-      throwUninitializedReanimatedException();
-    }
-    return false;
-  }
-  return true;
-};
-
-export const isConfigured: (throwError?: boolean) => boolean = (
-  throwError = false
-) => {
-  return checkPluginState(throwError);
-};
-
-export const isConfiguredCheck: () => void = () => {
-  checkPluginState(true);
-};
-
-function pushFrame(frame: (timestamp: Timestamp) => void): void {
-  (NativeReanimatedModule as JSReanimated).pushFrame(frame);
-}
-
-export function requestFrame(frame: (timestamp: Timestamp) => void): void {
-  'worklet';
-  if (NativeReanimatedModule.native) {
-    requestAnimationFrame(frame);
-  } else {
-    pushFrame(frame);
-  }
-}
-
+// this is for web implementation
 global._WORKLET = false;
 global._log = function (s: string) {
   console.log(s);
 };
 
-export function runOnUI<A extends any[], R>(
-  worklet: ComplexWorkletFunction<A, R>
-): (...args: A) => void {
-  return makeShareable(worklet);
-}
-
-export function makeShareable<T>(value: T): T {
-  isConfiguredCheck();
-  return NativeReanimatedModule.makeShareable(value);
-}
-
-export function getViewProp<T>(viewTag: string, propName: string): Promise<T> {
+export function getViewProp<T>(viewTag: number, propName: string): Promise<T> {
   if (global._IS_FABRIC) {
     throw new Error(
-      '[react-native-reanimated] `getViewProp` is not supported on Fabric yet'
+      '[Reanimated] `getViewProp` is not supported on Fabric yet.'
     );
   }
 
@@ -120,226 +69,91 @@ export function getViewProp<T>(viewTag: string, propName: string): Promise<T> {
   });
 }
 
-let _getTimestamp: () => number;
-if (nativeShouldBeMock()) {
-  _getTimestamp = () => {
-    return (NativeReanimatedModule as JSReanimated).getTimestamp();
-  };
-} else {
-  _getTimestamp = () => {
-    'worklet';
-    if (_frameTimestamp) {
-      return _frameTimestamp;
-    }
-    if (_eventTimestamp) {
-      return _eventTimestamp;
-    }
-    return _getCurrentTime();
-  };
-}
-
-export function getTimestamp(): number {
-  'worklet';
-  if (Platform.OS === 'web') {
-    return (NativeReanimatedModule as JSReanimated).getTimestamp();
+function getSensorContainer(): SensorContainer {
+  if (!global.__sensorContainer) {
+    global.__sensorContainer = new SensorContainer();
   }
-  return _getTimestamp();
+  return global.__sensorContainer;
 }
 
-function workletValueSetter<T extends WorkletValue>(
-  this: WorkletValueSetterContext,
-  value: T
-): void {
-  'worklet';
-  const previousAnimation = this._animation;
-  if (previousAnimation) {
-    previousAnimation.cancelled = true;
-    this._animation = null;
-  }
-  if (
-    typeof value === 'function' ||
-    (value !== null &&
-      typeof value === 'object' &&
-      (value as AnimationObject).onFrame !== undefined)
-  ) {
-    const animation: AnimationObject =
-      typeof value === 'function'
-        ? (value as () => AnimationObject)()
-        : (value as AnimationObject);
-    // prevent setting again to the same value
-    // and triggering the mappers that treat this value as an input
-    // this happens when the animation's target value(stored in animation.current until animation.onStart is called) is set to the same value as a current one(this._value)
-    // built in animations that are not higher order(withTiming, withSpring) hold target value in .current
-    if (this._value === animation.current && !animation.isHigherOrder) {
-      animation.callback && animation.callback(true);
-      return;
-    }
-    // animated set
-    const initializeAnimation = (timestamp: number) => {
-      animation.onStart(animation, this.value, timestamp, previousAnimation);
-    };
-    initializeAnimation(getTimestamp());
-    const step = (timestamp: number) => {
-      if (animation.cancelled) {
-        animation.callback && animation.callback(false /* finished */);
-        return;
-      }
-      const finished = animation.onFrame(animation, timestamp);
-      animation.finished = true;
-      animation.timestamp = timestamp;
-      this._value = animation.current;
-      if (finished) {
-        animation.callback && animation.callback(true /* finished */);
-      } else {
-        requestAnimationFrame(step);
-      }
-    };
-
-    this._animation = animation;
-
-    if (_frameTimestamp) {
-      // frame
-      step(_frameTimestamp);
-    } else {
-      requestAnimationFrame(step);
-    }
-  } else {
-    // prevent setting again to the same value
-    // and triggering the mappers that treat this value as an input
-    if (this._value === value) {
-      return;
-    }
-    this._value = value as Descriptor | AnimatableValue;
-  }
-}
-
-// We cannot use pushFrame
-// so we use own implementation for js
-function workletValueSetterJS<T extends WorkletValue>(
-  this: WorkletValueSetterContext,
-  value: T
-): void {
-  const previousAnimation = this._animation;
-  if (previousAnimation) {
-    previousAnimation.cancelled = true;
-    this._animation = null;
-  }
-  if (
-    typeof value === 'function' ||
-    (value !== null &&
-      typeof value === 'object' &&
-      (value as AnimationObject).onFrame)
-  ) {
-    // animated set
-    const animation: AnimationObject =
-      typeof value === 'function'
-        ? (value as () => AnimationObject)()
-        : (value as AnimationObject);
-    let initializeAnimation: ((timestamp: number) => void) | null = (
-      timestamp: number
-    ) => {
-      animation.onStart(animation, this.value, timestamp, previousAnimation);
-    };
-    const step = (timestamp: number) => {
-      if (animation.cancelled) {
-        animation.callback && animation.callback(false /* finished */);
-        return;
-      }
-      if (initializeAnimation) {
-        initializeAnimation(timestamp);
-        initializeAnimation = null; // prevent closure from keeping ref to previous animation
-      }
-      const finished = animation.onFrame(animation, timestamp);
-      animation.timestamp = timestamp;
-      this._setValue && this._setValue(animation.current as AnimatableValue);
-      if (finished) {
-        animation.callback && animation.callback(true /* finished */);
-      } else {
-        requestFrame(step);
-      }
-    };
-
-    this._animation = animation;
-
-    requestFrame(step);
-  } else {
-    this._setValue && this._setValue(value as AnimatableValue | Descriptor);
-  }
-}
-
-export function makeMutable<T>(value: T): SharedValue<T> {
-  isConfiguredCheck();
-  return NativeReanimatedModule.makeMutable(value);
-}
-
-export function makeRemote<T>(object = {}): T {
-  isConfiguredCheck();
-  return NativeReanimatedModule.makeRemote(object);
-}
-
-export function startMapper(
-  mapper: () => void,
-  inputs: any[] = [],
-  outputs: any[] = [],
-  updater: () => void = () => {
-    // noop
-  },
-  viewDescriptors: Descriptor[] | SharedValue<Descriptor[]> = []
+export function registerEventHandler<T>(
+  eventHandler: (event: T) => void,
+  eventName: string,
+  emitterReactTag = -1
 ): number {
-  isConfiguredCheck();
-  return NativeReanimatedModule.startMapper(
-    mapper,
-    inputs,
-    outputs,
-    updater,
-    viewDescriptors
+  function handleAndFlushAnimationFrame(eventTimestamp: number, event: T) {
+    'worklet';
+    global.__frameTimestamp = eventTimestamp;
+    eventHandler(event);
+    global.__flushAnimationFrame(eventTimestamp);
+    global.__frameTimestamp = undefined;
+  }
+  return NativeReanimatedModule.registerEventHandler(
+    makeShareableCloneRecursive(handleAndFlushAnimationFrame),
+    eventName,
+    emitterReactTag
   );
 }
 
-export function stopMapper(mapperId: number): void {
-  NativeReanimatedModule.stopMapper(mapperId);
+export function unregisterEventHandler(id: number): void {
+  return NativeReanimatedModule.unregisterEventHandler(id);
 }
 
-export interface RunOnJSFunction<A extends any[], R> {
-  __callAsync?: (...args: A) => void;
-  (...args: A): R;
-}
-
-export function runOnJS<A extends any[], R>(
-  fun: RunOnJSFunction<A, R>
-): () => void {
-  'worklet';
-  if (!_WORKLET) {
-    return fun;
-  }
-  if (!fun.__callAsync) {
-    throw new Error(
-      "Attempting to call runOnJS with an object that is not a host function. Using runOnJS is only possible with methods that are defined on the main React-Native Javascript thread and that aren't marked as worklets"
-    );
-  } else {
-    return fun.__callAsync;
-  }
-}
-
-NativeReanimatedModule.installCoreFunctions(
-  NativeReanimatedModule.native
-    ? (workletValueSetter as <T>(value: T) => void)
-    : (workletValueSetterJS as <T>(value: T) => void)
-);
-
-if (!isWeb() && isConfigured()) {
-  const capturableConsole = console;
-  runOnUI(() => {
+export function subscribeForKeyboardEvents(
+  eventHandler: (state: number, height: number) => void,
+  options: AnimatedKeyboardOptions
+): number {
+  // TODO: this should really go with the same code path as other events, that is
+  // via registerEventHandler. For now we are copying the code from there.
+  function handleAndFlushAnimationFrame(state: number, height: number) {
     'worklet';
-    const console = {
-      debug: runOnJS(capturableConsole.debug),
-      log: runOnJS(capturableConsole.log),
-      warn: runOnJS(capturableConsole.warn),
-      error: runOnJS(capturableConsole.error),
-      info: runOnJS(capturableConsole.info),
-    };
-    _setGlobalConsole(console);
-  })();
+    const now = performance.now();
+    global.__frameTimestamp = now;
+    eventHandler(state, height);
+    global.__flushAnimationFrame(now);
+    global.__frameTimestamp = undefined;
+  }
+  return NativeReanimatedModule.subscribeForKeyboardEvents(
+    makeShareableCloneRecursive(handleAndFlushAnimationFrame),
+    options.isStatusBarTranslucentAndroid ?? false
+  );
+}
+
+export function unsubscribeFromKeyboardEvents(listenerId: number): void {
+  return NativeReanimatedModule.unsubscribeFromKeyboardEvents(listenerId);
+}
+
+export function registerSensor(
+  sensorType: SensorType,
+  config: SensorConfig,
+  eventHandler: (
+    data: Value3D | ValueRotation,
+    orientationDegrees: number
+  ) => void
+): number {
+  const sensorContainer = getSensorContainer();
+  return sensorContainer.registerSensor(
+    sensorType,
+    config,
+    makeShareableCloneRecursive(eventHandler)
+  );
+}
+
+export function initializeSensor(
+  sensorType: SensorType,
+  config: SensorConfig
+): SharedValue<Value3D | ValueRotation> {
+  const sensorContainer = getSensorContainer();
+  return sensorContainer.initializeSensor(sensorType, config);
+}
+
+export function unregisterSensor(sensorId: number): void {
+  const sensorContainer = getSensorContainer();
+  return sensorContainer.unregisterSensor(sensorId);
+}
+
+if (!isWeb()) {
+  initializeUIRuntime();
 }
 
 type FeaturesConfig = {
@@ -371,12 +185,26 @@ export function enableLayoutAnimations(
   }
 }
 
+export function configureLayoutAnimations(
+  viewTag: number | HTMLElement,
+  type: LayoutAnimationType,
+  config:
+    | LayoutAnimationFunction
+    | Keyframe
+    | SharedTransitionAnimationsFunction
+    | ProgressAnimationCallback,
+  sharedTransitionTag = ''
+): void {
+  NativeReanimatedModule.configureLayoutAnimation(
+    viewTag as number, // On web this function is no-op, therefore we can cast viewTag to number
+    type,
+    sharedTransitionTag,
+    makeShareableCloneRecursive(config)
+  );
+}
+
 export function configureProps(uiProps: string[], nativeProps: string[]): void {
   if (!nativeShouldBeMock()) {
     NativeReanimatedModule.configureProps(uiProps, nativeProps);
   }
-}
-
-export function jestResetJsReanimatedModule() {
-  (NativeReanimatedModule as JSReanimated).jestResetModule();
 }

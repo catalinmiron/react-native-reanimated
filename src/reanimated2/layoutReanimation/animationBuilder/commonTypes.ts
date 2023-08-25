@@ -1,8 +1,9 @@
-import { EasingFn } from '../../Easing';
-import { StyleProps } from '../../commonTypes';
+import type { ExtractArrayItemType } from '../../helperTypes';
+import type { EasingFunction } from '../../Easing';
+import type { StyleProps } from '../../commonTypes';
 
 export interface KeyframeProps extends StyleProps {
-  easing?: EasingFn;
+  easing?: EasingFunction;
   [key: string]: any;
 }
 
@@ -21,6 +22,8 @@ export interface EntryAnimationsValues {
   targetHeight: number;
   targetGlobalOriginX: number;
   targetGlobalOriginY: number;
+  windowWidth: number;
+  windowHeight: number;
 }
 
 export interface ExitAnimationsValues {
@@ -30,15 +33,19 @@ export interface ExitAnimationsValues {
   currentHeight: number;
   currentGlobalOriginX: number;
   currentGlobalOriginY: number;
+  windowWidth: number;
+  windowHeight: number;
 }
 
-export type EntryExitAnimationFunction = (
-  targetValues: EntryAnimationsValues | ExitAnimationsValues
-) => LayoutAnimation;
+export type EntryExitAnimationFunction =
+  | ((targetValues: EntryAnimationsValues) => LayoutAnimation)
+  | ((targetValues: ExitAnimationsValues) => LayoutAnimation)
+  | (() => LayoutAnimation);
 
 export type AnimationConfigFunction<T> = (targetValues: T) => LayoutAnimation;
 
 export interface LayoutAnimationsValues {
+  [key: string]: number | number[];
   currentOriginX: number;
   currentOriginY: number;
   currentWidth: number;
@@ -55,9 +62,34 @@ export interface LayoutAnimationsValues {
   windowHeight: number;
 }
 
+export interface SharedTransitionAnimationsValues
+  extends LayoutAnimationsValues {
+  currentTransformMatrix: number[];
+  targetTransformMatrix: number[];
+}
+
+export type SharedTransitionAnimationsFunction = (
+  values: SharedTransitionAnimationsValues
+) => LayoutAnimation;
+
+export enum LayoutAnimationType {
+  ENTERING = 1,
+  EXITING = 2,
+  LAYOUT = 3,
+  SHARED_ELEMENT_TRANSITION = 4,
+  SHARED_ELEMENT_TRANSITION_PROGRESS = 5,
+}
+
 export type LayoutAnimationFunction = (
   targetValues: LayoutAnimationsValues
 ) => LayoutAnimation;
+
+export type LayoutAnimationStartFunction = (
+  tag: number,
+  type: LayoutAnimationType,
+  yogaValues: LayoutAnimationsValues,
+  config: LayoutAnimationFunction
+) => void;
 
 export interface ILayoutAnimationBuilder {
   build: () => LayoutAnimationFunction;
@@ -65,9 +97,10 @@ export interface ILayoutAnimationBuilder {
 
 export interface BaseLayoutAnimationConfig {
   duration?: number;
-  easing?: EasingFn;
+  easing?: EasingFunction;
   type?: AnimationFunction;
   damping?: number;
+  dampingRatio?: number;
   mass?: number;
   stiffness?: number;
   overshootClamping?: number;
@@ -95,3 +128,32 @@ export interface IEntryAnimationBuilder {
 export interface IExitAnimationBuilder {
   build: () => AnimationConfigFunction<ExitAnimationsValues>;
 }
+
+export type ProgressAnimationCallback = (
+  viewTag: number,
+  progress: number
+) => void;
+
+export type ProgressAnimation = (
+  viewTag: number,
+  values: SharedTransitionAnimationsValues,
+  progress: number
+) => void;
+
+export type CustomProgressAnimation = (
+  values: SharedTransitionAnimationsValues,
+  progress: number
+) => StyleProps;
+
+export enum SharedTransitionType {
+  ANIMATION = 'animation',
+  PROGRESS_ANIMATION = 'progressAnimation',
+}
+
+export type EntryExitAnimationsValues =
+  | EntryAnimationsValues
+  | ExitAnimationsValues;
+
+export type StylePropsWithArrayTransform = StyleProps & {
+  transform?: ExtractArrayItemType<StyleProps['transform']>[];
+};

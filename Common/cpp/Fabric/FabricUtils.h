@@ -2,15 +2,16 @@
 #ifdef RCT_NEW_ARCH_ENABLED
 
 #ifdef ANDROID
-#include <Binding.h>
 #include <fbjni/fbjni.h>
+#include <react/fabric/Binding.h>
 #endif
 #include <react/renderer/uimanager/UIManager.h>
 
 #include <memory>
 #include <string>
 
-using namespace facebook::react;
+using namespace facebook;
+using namespace react;
 
 namespace reanimated {
 
@@ -35,7 +36,7 @@ struct UIManagerPublic {
 struct BindingPublic : public jni::HybridClass<Binding>,
                        public SchedulerDelegate,
                        public LayoutAnimationStatusDelegate {
-  butter::shared_mutex installMutex_;
+  std::shared_mutex installMutex_;
   std::shared_ptr<FabricMountingManager> mountingManager_;
   std::shared_ptr<facebook::react::Scheduler> scheduler_;
 };
@@ -45,34 +46,10 @@ struct SchedulerPublic : public UIManagerDelegate {
   SharedComponentDescriptorRegistry componentDescriptorRegistry_;
   RuntimeExecutor runtimeExecutor_;
 };
-
-RuntimeExecutor getRuntimeExecutorFromBinding(Binding *binding);
 #endif
 
-std::shared_ptr<const ContextContainer> getContextContainerFromUIManager(
-    const UIManager *uiManager);
-
-void UIManager_dispatchCommand(
-    const std::shared_ptr<UIManager> &uiManager,
-    const ShadowNode::Shared &shadowNode,
-    std::string const &commandName,
-    folly::dynamic const &args);
-
-LayoutMetrics UIManager_getRelativeLayoutMetrics(
-    const std::shared_ptr<UIManager> &uiManager,
-    ShadowNode const &shadowNode,
-    ShadowNode const *ancestorShadowNode,
-    LayoutableShadowNode::LayoutInspectingPolicy policy);
-
-ShadowNode::Shared UIManager_cloneNode(
-    const UIManager *uiManager,
-    const ShadowNode::Shared &shadowNode,
-    const ShadowNode::SharedListOfShared &children = nullptr,
-    const RawProps *rawProps = nullptr);
-
-void UIManager_appendChild(
-    const ShadowNode::Shared &parentShadowNode,
-    const ShadowNode::Shared &childShadowNode);
+const ContextContainer &getContextContainerFromUIManager(
+    const UIManager &uiManager);
 
 } // namespace reanimated
 

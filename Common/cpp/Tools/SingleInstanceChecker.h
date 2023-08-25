@@ -7,6 +7,10 @@
 #include <iostream>
 #include <string>
 
+#ifdef ANDROID
+#include <android/log.h>
+#endif
+
 namespace reanimated {
 
 // This is a class that counts how many instances of a different class there
@@ -22,14 +26,22 @@ class SingleInstanceChecker {
  private:
   void assertWithMessage(bool condition, std::string message) {
     if (!condition) {
-      std::cerr << message << std::endl;
-      assert(condition);
+#ifdef ANDROID
+      __android_log_print(
+          ANDROID_LOG_WARN, "Reanimated", "%s", message.c_str());
+#else
+      std::cerr << "[Reanimated] " << message << std::endl;
+#endif
+
+#ifdef IS_REANIMATED_EXAMPLE_APP
+      assert(false);
+#endif
     }
   }
 
   // A static field will exist separately for every class template.
   // This has to be inline for automatic initialization.
-  inline static int instanceCount_;
+  inline static volatile int instanceCount_;
 };
 
 template <class T>
@@ -42,7 +54,7 @@ SingleInstanceChecker<T>::SingleInstanceChecker() {
   // to co-exist during a reload.
   assertWithMessage(
       instanceCount_ <= 1,
-      "More than one instance of " + className +
+      "[Reanimated] More than one instance of " + className +
           " present. This may indicate a memory leak due to a retain cycle.");
 
   instanceCount_++;

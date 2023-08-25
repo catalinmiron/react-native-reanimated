@@ -1,19 +1,20 @@
-import { Dimensions } from 'react-native';
 import { withSequence, withTiming } from '../../animation';
+import type { BaseAnimationBuilder } from '../animationBuilder';
 import { ComplexAnimationBuilder } from '../animationBuilder';
-import {
+import type {
+  EntryExitAnimationsValues,
   EntryExitAnimationFunction,
   IEntryExitAnimationBuilder,
 } from '../animationBuilder/commonTypes';
-
-const { width } = Dimensions.get('window');
 
 export class LightSpeedInRight
   extends ComplexAnimationBuilder
   implements IEntryExitAnimationBuilder
 {
-  static createInstance(): LightSpeedInRight {
-    return new LightSpeedInRight();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new LightSpeedInRight() as InstanceType<T>;
   }
 
   build = (): EntryExitAnimationFunction => {
@@ -24,7 +25,7 @@ export class LightSpeedInRight
     const callback = this.callbackV;
     const initialValues = this.initialValues;
 
-    return () => {
+    return (values: EntryExitAnimationsValues) => {
       'worklet';
       return {
         animations: {
@@ -50,7 +51,7 @@ export class LightSpeedInRight
         },
         initialValues: {
           opacity: 0,
-          transform: [{ translateX: width }, { skewX: '-45deg' }],
+          transform: [{ translateX: values.windowWidth }, { skewX: '-45deg' }],
           ...initialValues,
         },
         callback: callback,
@@ -63,8 +64,10 @@ export class LightSpeedInLeft
   extends ComplexAnimationBuilder
   implements IEntryExitAnimationBuilder
 {
-  static createInstance(): LightSpeedInLeft {
-    return new LightSpeedInLeft();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new LightSpeedInLeft() as InstanceType<T>;
   }
 
   build = (): EntryExitAnimationFunction => {
@@ -75,7 +78,7 @@ export class LightSpeedInLeft
     const callback = this.callbackV;
     const initialValues = this.initialValues;
 
-    return () => {
+    return (values: EntryExitAnimationsValues) => {
       'worklet';
       return {
         animations: {
@@ -101,7 +104,7 @@ export class LightSpeedInLeft
         },
         initialValues: {
           opacity: 0,
-          transform: [{ translateX: -width }, { skewX: '45deg' }],
+          transform: [{ translateX: -values.windowWidth }, { skewX: '45deg' }],
           ...initialValues,
         },
         callback: callback,
@@ -114,8 +117,10 @@ export class LightSpeedOutRight
   extends ComplexAnimationBuilder
   implements IEntryExitAnimationBuilder
 {
-  static createInstance(): LightSpeedOutRight {
-    return new LightSpeedOutRight();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new LightSpeedOutRight() as InstanceType<T>;
   }
 
   build = (): EntryExitAnimationFunction => {
@@ -125,14 +130,17 @@ export class LightSpeedOutRight
     const callback = this.callbackV;
     const initialValues = this.initialValues;
 
-    return () => {
+    return (values: EntryExitAnimationsValues) => {
       'worklet';
       return {
         animations: {
           opacity: delayFunction(delay, animation(0, config)),
           transform: [
             {
-              translateX: delayFunction(delay, animation(width, config)),
+              translateX: delayFunction(
+                delay,
+                animation(values.windowWidth, config)
+              ),
             },
             {
               skewX: delayFunction(delay, animation('-45deg', config)),
@@ -154,8 +162,10 @@ export class LightSpeedOutLeft
   extends ComplexAnimationBuilder
   implements IEntryExitAnimationBuilder
 {
-  static createInstance(): LightSpeedOutLeft {
-    return new LightSpeedOutLeft();
+  static createInstance<T extends typeof BaseAnimationBuilder>(
+    this: T
+  ): InstanceType<T> {
+    return new LightSpeedOutLeft() as InstanceType<T>;
   }
 
   build = (): EntryExitAnimationFunction => {
@@ -165,14 +175,17 @@ export class LightSpeedOutLeft
     const callback = this.callbackV;
     const initialValues = this.initialValues;
 
-    return () => {
+    return (values: EntryExitAnimationsValues) => {
       'worklet';
       return {
         animations: {
           opacity: delayFunction(delay, animation(0, config)),
           transform: [
             {
-              translateX: delayFunction(delay, animation(-width, config)),
+              translateX: delayFunction(
+                delay,
+                animation(-values.windowWidth, config)
+              ),
             },
             {
               skewX: delayFunction(delay, animation('45deg', config)),

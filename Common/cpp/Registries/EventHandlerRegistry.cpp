@@ -1,22 +1,49 @@
 #include "EventHandlerRegistry.h"
 #include "WorkletEventHandler.h"
 
+#include <utility>
+
 namespace reanimated {
 
 void EventHandlerRegistry::registerEventHandler(
     std::shared_ptr<WorkletEventHandler> eventHandler) {
   const std::lock_guard<std::mutex> lock(instanceMutex);
-  eventMappings[eventHandler->eventName][eventHandler->id] = eventHandler;
-  eventHandlers[eventHandler->id] = eventHandler;
+  const auto &eventName = eventHandler->getEventName();
+  auto handlerId = eventHandler->getHandlerId();
+
+  if (eventHandler->shouldIgnoreEmitterReactTag()) {
+    eventMappingsWithoutTag[eventName][handlerId] = eventHandler;
+  } else {
+    const auto emitterReactTag = eventHandler->getEmitterReactTag();
+    const auto eventHash = std::make_pair(emitterReactTag, eventName);
+    eventMappingsWithTag[eventHash][handlerId] = eventHandler;
+  }
+  eventHandlers[handlerId] = eventHandler;
 }
 
-void EventHandlerRegistry::unregisterEventHandler(unsigned long id) {
+void EventHandlerRegistry::unregisterEventHandler(uint64_t id) {
   const std::lock_guard<std::mutex> lock(instanceMutex);
   auto handlerIt = eventHandlers.find(id);
   if (handlerIt != eventHandlers.end()) {
-    eventMappings[handlerIt->second->eventName].erase(id);
-    if (eventMappings[handlerIt->second->eventName].empty()) {
-      eventMappings.erase(handlerIt->second->eventName);
+    const auto &eventHandler = handlerIt->second;
+    const auto &eventName = eventHandler->getEventName();
+
+    if (eventHandler->shouldIgnoreEmitterReactTag()) {
+      const auto eventMappingIt = eventMappingsWithoutTag.find(eventName);
+      auto &handlersMap = eventMappingIt->second;
+      handlersMap.erase(id);
+      if (handlersMap.empty()) {
+        eventMappingsWithoutTag.erase(eventMappingIt);
+      }
+    } else {
+      const auto emitterReactTag = eventHandler->getEmitterReactTag();
+      const auto eventHash = std::make_pair(emitterReactTag, eventName);
+      const auto eventMappingIt = eventMappingsWithTag.find(eventHash);
+      auto &handlersMap = eventMappingIt->second;
+      handlersMap.erase(id);
+      if (handlersMap.empty()) {
+        eventMappingsWithTag.erase(eventMappingIt);
+      }
     }
     eventHandlers.erase(handlerIt);
   }
@@ -24,58 +51,42 @@ void EventHandlerRegistry::unregisterEventHandler(unsigned long id) {
 
 void EventHandlerRegistry::processEvent(
     jsi::Runtime &rt,
-    std::string eventName,
-#ifdef RCT_NEW_ARCH_ENABLED
-    jsi::Value &eventPayload
-#else
-    std::string eventPayload
-#endif
-    /**/) {
+    double eventTimestamp,
+    const std::string &eventName,
+    const int emitterReactTag,
+    const jsi::Value &eventPayload) {
   std::vector<std::shared_ptr<WorkletEventHandler>> handlersForEvent;
   {
     const std::lock_guard<std::mutex> lock(instanceMutex);
-    auto handlersIt = eventMappings.find(eventName);
-    if (handlersIt != eventMappings.end()) {
+    auto handlersIt = eventMappingsWithoutTag.find(eventName);
+    if (handlersIt != eventMappingsWithoutTag.end()) {
       for (auto handler : handlersIt->second) {
         handlersForEvent.push_back(handler.second);
       }
     }
+    const auto eventHash = std::make_pair(emitterReactTag, eventName);
+    auto handlersWithTagIt = eventMappingsWithTag.find(eventHash);
+    if (handlersWithTagIt != eventMappingsWithTag.end()) {
+      for (auto handler : handlersWithTagIt->second) {
+        handlersForEvent.push_back(handler.second);
+      }
+    }
   }
-#ifdef RCT_NEW_ARCH_ENABLED
+
   eventPayload.asObject(rt).setProperty(
       rt, "eventName", jsi::String::createFromUtf8(rt, eventName));
   for (auto handler : handlersForEvent) {
-    handler->process(rt, eventPayload);
+    handler->process(eventTimestamp, eventPayload);
   }
-#else
-  // We receive here a JS Map with JSON as a value of NativeMap key
-  // { NativeMap: { "jsonProp": "json value" } }
-  // So we need to extract only JSON part
-  std::string delimimter = "NativeMap:";
-  auto positionToSplit = eventPayload.find(delimimter) + delimimter.size();
-  auto lastBracketCharactedPosition = eventPayload.size() - positionToSplit - 1;
-  auto eventJSON =
-      eventPayload.substr(positionToSplit, lastBracketCharactedPosition);
-
-  if (eventJSON.compare(std::string("null")) == 0) {
-    return;
-  }
-
-  auto eventObject = jsi::Value::createFromJsonUtf8(
-      rt, reinterpret_cast<uint8_t *>(&eventJSON[0]), eventJSON.size());
-
-  eventObject.asObject(rt).setProperty(
-      rt, "eventName", jsi::String::createFromUtf8(rt, eventName));
-  for (auto handler : handlersForEvent) {
-    handler->process(rt, eventObject);
-  }
-#endif
 }
 
-bool EventHandlerRegistry::isAnyHandlerWaitingForEvent(std::string eventName) {
+bool EventHandlerRegistry::isAnyHandlerWaitingForEvent(
+    const std::string &eventName,
+    const int emitterReactTag) {
   const std::lock_guard<std::mutex> lock(instanceMutex);
-  auto it = eventMappings.find(eventName);
-  return (it != eventMappings.end()) && (!(it->second).empty());
+  const auto eventHash = std::make_pair(emitterReactTag, eventName);
+  auto it = eventMappingsWithTag.find(eventHash);
+  return it != eventMappingsWithTag.end() && !it->second.empty();
 }
 
 } // namespace reanimated
