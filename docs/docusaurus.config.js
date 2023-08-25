@@ -20,7 +20,7 @@ const config = {
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
   organizationName: 'catalinmiron', // Usually your GitHub org/user name.
-  projectName: 'reanimated-docs', // Usually your repo name.
+  projectName: 'react-native-reanimated', // Usually your repo name.
 
   onBrokenLinks: 'warn',
   onBrokenMarkdownLinks: 'warn',
