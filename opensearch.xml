@@ -4,7 +4,7 @@
   <ShortName>React Native Reanimated</ShortName>
   <Description>Search React Native Reanimated</Description>
   <InputEncoding>UTF-8</InputEncoding>
-  <Image width="16" height="16" type="image/x-icon">http://www.reanimated2.com/img/SWM_Fav_192x192.png</Image>
+  <Image width="16" height="16" type="image/x-icon">http://www.reanimated2.com/img/favicon.ico</Image>
   <Url type="text/html" method="get" template="http://www.reanimated2.com/search?q={searchTerms}"/>
   <Url type="application/opensearchdescription+xml" rel="self" template="http://www.reanimated2.com/opensearch.xml" />
   <moz:SearchForm>http://www.reanimated2.com/</moz:SearchForm>

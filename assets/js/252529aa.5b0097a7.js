@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkreact_native_reanimated_docs=self.webpackChunkreact_native_reanimated_docs||[]).push([[5548],{57254:e=>{e.exports=JSON.parse('{"title":"Fundamentals","slug":"/category/fundamentals","permalink":"/docs/category/fundamentals","navigation":{"next":{"title":"Getting started","permalink":"/docs/fundamentals/getting-started"}}}')}}]);
